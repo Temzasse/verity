@@ -32,22 +32,39 @@ export function renderFactCheckResults(data, verdicts, doc = document) {
     const badge = el('span', 'chip', verdict.label);
     badge.style.setProperty('--cat', verdict.color);
     section.append(badge, el('p', `claim-summary${result.takeaway ? '' : ' claim-summary-preview'}`, result.takeaway || result.summary));
+    // The sources are the point of a fact-check, so their links stay visible; excerpts and the
+    // full assessment live under Details.
+    const evidence = [
+      ...result.sources.map((source) => ({ url: source.url, title: source.title })),
+      ...result.reviews.filter((review) => review.status === 'used')
+        .map((review) => ({ url: review.url, title: review.title, label: `Fact-check · ${review.publisher}` })),
+    ];
+    const seen = new Set();
+    const links = el('ul', 'claim-source-links');
+    for (const item of evidence) {
+      const a = link(item.url, item.title);
+      if (!a || seen.has(a.href)) continue;
+      seen.add(a.href);
+      const row = el('li');
+      row.append(a, el('span', 'source-host', item.label || new URL(a.href).hostname.replace(/^www\./, '')));
+      links.append(row);
+    }
+    if (links.childElementCount) section.append(el('p', 'claim-heading', 'Sources'), links);
+
     const details = el('details', 'claim-details');
-    const count = result.sources.length;
-    details.append(el('summary', null, `Details${count ? ` · ${count} source${count === 1 ? '' : 's'}` : ''}`),
+    details.append(el('summary', null, 'Details'),
       el('p', 'claim-heading', 'Claim checked'), el('p', 'claim-full-text', result.claim),
       el('p', 'claim-heading', 'Assessment'), el('p', 'claim-explanation', result.summary));
     if (data.cached) details.append(el('p', 'claim-note', 'Previously checked'));
 
-    if (result.sources.length) {
-      details.append(el('p', 'claim-heading', 'Evidence used'));
+    const excerpts = result.sources.filter((source) => source.citedText && link(source.url));
+    if (excerpts.length) {
+      details.append(el('p', 'claim-heading', 'What the sources say'));
       const list = el('ul', 'claim-sources');
-      for (const source of result.sources) {
-        const a = link(source.url, source.title);
-        if (!a) continue;
+      for (const source of excerpts) {
         const item = el('li');
-        item.append(a);
-        if (source.citedText) item.append(el('blockquote', 'source-excerpt', source.citedText));
+        item.append(el('span', 'source-host', new URL(source.url).hostname.replace(/^www\./, '')),
+          el('blockquote', 'source-excerpt', source.citedText));
         list.append(item);
       }
       details.append(list);

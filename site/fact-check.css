@@ -56,6 +56,30 @@
   gap: 8px;
   font-size: 13px;
 }
+.claim-results .claim-source-links {
+  margin: 0 0 4px;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+}
+.claim-results .claim-source-links li {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+.claim-results .claim-source-links a {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.claim-results .source-host {
+  color: var(--v-muted, var(--muted));
+  font-size: 12px;
+}
 .claim-results a {
   color: var(--v-accent-text, var(--accent-text));
   text-decoration: underline;
