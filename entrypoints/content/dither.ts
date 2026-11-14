@@ -22,11 +22,19 @@ export type ScanEffectOptions = {
   screenshot: string | null;
   /** Any CSS color; dithered "ink" uses it. */
   color: string;
+  /** Duration of one top-to-bottom pass. */
   durationMs: number;
+  /** Keep sweeping (one pass after another) until this settles. At least one pass always runs. */
+  until?: Promise<unknown>;
 };
 
 export async function playScanEffect(opts: ScanEffectOptions): Promise<void> {
-  const { canvas, line, screenshot, color, durationMs } = opts;
+  const { canvas, line, screenshot, color, durationMs, until } = opts;
+  let settled = !until;
+  until?.then(
+    () => (settled = true),
+    () => (settled = true),
+  );
   const vw = window.innerWidth;
   const vh = window.innerHeight;
   const gw = Math.ceil(vw / CELL);
@@ -52,11 +60,15 @@ export async function playScanEffect(opts: ScanEffectOptions): Promise<void> {
   let prevBottom = 0;
 
   line.hidden = false;
+  // The screenshot only matches the page at this scroll position; after scrolling, show just the glow.
+  const scrollX0 = window.scrollX;
+  const scrollY0 = window.scrollY;
 
   await new Promise<void>((resolve) => {
-    const start = performance.now();
+    let start = performance.now();
     const tick = (now: number) => {
       const p = Math.min(1, (now - start) / durationMs);
+      const contentValid = window.scrollX === scrollX0 && window.scrollY === scrollY0;
       // Overshoot past the bottom so the trail fully leaves the viewport.
       const lineY = easeInOut(p) * (vh + TRAIL);
       const lineRow = Math.floor(lineY / CELL);
@@ -79,7 +91,9 @@ export async function playScanEffect(opts: ScanEffectOptions): Promise<void> {
         for (let x = 0; x < gw; x++) {
           const i = rowStart + x;
           if (noise[i]! >= f) continue; // dissolved back to the real page
-          out[i] = !isInk[i] && BAYER4[bayerRow + (x & 3)]! < glow ? inkPx : dithered[i]!;
+          const glowDot = BAYER4[bayerRow + (x & 3)]! < glow;
+          if (!contentValid) out[i] = glowDot ? inkPx : 0;
+          else out[i] = !isInk[i] && glowDot ? inkPx : dithered[i]!;
         }
       }
 
@@ -89,8 +103,16 @@ export async function playScanEffect(opts: ScanEffectOptions): Promise<void> {
       prevTop = top;
       prevBottom = bottom;
 
-      if (p < 1) requestAnimationFrame(tick);
-      else resolve();
+      if (p < 1) {
+        requestAnimationFrame(tick);
+      } else if (!settled) {
+        // Still waiting on the analysis: start another pass from the top.
+        for (let i = 0; i < noise.length; i++) noise[i] = Math.random();
+        start = now;
+        requestAnimationFrame(tick);
+      } else {
+        resolve();
+      }
     };
     requestAnimationFrame(tick);
   });

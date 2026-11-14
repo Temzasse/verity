@@ -6,7 +6,8 @@ import { playScanEffect } from './dither';
 import { CATEGORIES } from './analyze';
 import { applyHighlights, clearHighlights, setActiveHighlight, type PlacedFinding } from './highlight';
 
-const SCAN_EFFECT_MS = 1600;
+/** One scan-line pass; passes repeat until the analysis returns. */
+const SCAN_EFFECT_MS = 2600;
 
 declare global {
   interface Window {
@@ -259,10 +260,15 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
       body.innerHTML = `<p class="muted">Scanning page…</p>`;
 
       const color = getComputedStyle(sweep).getPropertyValue('background-color');
-      const [result] = await Promise.all([
-        run(),
-        playScanEffect({ canvas, line: sweep, screenshot, color, durationMs: SCAN_EFFECT_MS }),
-      ]);
+      const resultPromise = run();
+      // After the first pass the page text is extracted; what's left is waiting on the model.
+      const statusTimer = setTimeout(() => {
+        const status = body.querySelector('.muted');
+        if (status) status.textContent = 'Analyzing with Claude…';
+      }, SCAN_EFFECT_MS);
+      await playScanEffect({ canvas, line: sweep, screenshot, color, durationMs: SCAN_EFFECT_MS, until: resultPromise });
+      clearTimeout(statusTimer);
+      const result = await resultPromise;
 
       renderResult(result);
     },
