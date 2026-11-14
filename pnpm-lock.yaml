@@ -7,6 +7,10 @@ settings:
 importers:
 
   .:
+    dependencies:
+      '@mozilla/readability':
+        specifier: ^0.6.0
+        version: 0.6.0
     devDependencies:
       typescript:
         specifier: ^7.0.2
@@ -166,6 +170,10 @@ packages:
 
   '@mdn/browser-compat-data@8.1.4':
     resolution: {integrity: sha512-Cgp3OP3u9x57kT1sZPI115SP5H1IyaBhdDPnvnHRYZ1988kW83wuqcIdcMinLJXlMKOL5Y2cufWHzngh5cVtow==}
+
+  '@mozilla/readability@0.6.0':
+    resolution: {integrity: sha512-juG5VWh4qAivzTAeMzvY9xs9HY5rAcr2E4I7tiSSCokRFi7XIZCAu92ZkSTsIj1OPceCifL3cpfteP3pDT9/QQ==}
+    engines: {node: '>=14.0.0'}
 
   '@napi-rs/wasm-runtime@1.2.6':
     resolution: {integrity: sha512-mRyDmEw9/fCDXCGfL1sbgIw/GUK0PVxRW4YwgPN61F3LQ+fSyoBFarJVzgGyhF6kRzEQZ0FejDqm4WLXSeqQmw==}
@@ -2148,6 +2156,8 @@ snapshots:
       '@jridgewell/sourcemap-codec': 1.6.0
 
   '@mdn/browser-compat-data@8.1.4': {}
+
+  '@mozilla/readability@0.6.0': {}
 
   '@napi-rs/wasm-runtime@1.2.6(@emnapi/core@2.0.0-beta.2)(@emnapi/runtime@2.0.0-beta.2)':
     dependencies:

@@ -108,26 +108,6 @@ h1 {
   color: var(--v-muted);
   font-size: 13px;
 }
-dl {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-  margin: 0 0 12px;
-}
-dl div {
-  background: var(--v-tile);
-  border-radius: 8px;
-  padding: 8px 10px;
-}
-dt {
-  font-size: 11px;
-  color: var(--v-muted);
-}
-dd {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-}
 
 /* Scan line; its position is driven from JS (dither.ts). */
 .sweep {
@@ -159,17 +139,116 @@ dd {
   from { opacity: 0; transform: translateY(-6px); }
 }
 
-/* Placeholder "scanned" visual: translucent tint over the whole page. */
-.tint {
-  position: fixed;
-  inset: 0;
-  background: color-mix(in srgb, var(--v-accent) 10%, transparent);
-  pointer-events: none;
-  animation: v-fade 300ms ease-out;
+/* Findings list */
+.findings {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: grid;
+  gap: 6px;
 }
-.tint[hidden] {
+.finding {
+  all: unset;
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--v-tile);
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+.finding:hover {
+  border-color: var(--v-border);
+  filter: brightness(1.05);
+}
+.finding:focus-visible {
+  outline: 2px solid var(--v-accent);
+  outline-offset: 1px;
+}
+.finding.active {
+  border-color: var(--v-accent);
+}
+.finding-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.excerpt {
+  margin: 0 !important;
+  font-size: 13px;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.chip {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--cat);
+  white-space: nowrap;
+}
+.confidence {
+  font-size: 11px;
+  color: var(--v-muted);
+  font-variant-numeric: tabular-nums;
+}
+.note {
+  font-size: 12px !important;
+  margin: 0 !important;
+}
+
+/* Tooltip anchored to a highlighted passage on the page */
+.tooltip {
+  position: fixed;
+  max-width: 300px;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  background: var(--v-bg);
+  color: var(--v-fg);
+  border: 1px solid var(--v-border);
+  border-top: 3px solid var(--cat);
+  border-radius: 10px;
+  box-shadow: 0 10px 28px rgb(0 0 0 / 0.22);
+  font: 13px/1.4 system-ui, -apple-system, sans-serif;
+  pointer-events: auto;
+  animation: v-in 140ms ease-out;
+}
+.tooltip[hidden] {
   display: none;
 }
-@keyframes v-fade {
-  from { opacity: 0; }
+.tooltip::after {
+  content: '';
+  position: absolute;
+  left: var(--arrow-x, 16px);
+  bottom: -6px;
+  width: 10px;
+  height: 10px;
+  background: var(--v-bg);
+  border-right: 1px solid var(--v-border);
+  border-bottom: 1px solid var(--v-border);
+  transform: translateX(-50%) rotate(45deg);
+}
+.tooltip.below::after {
+  bottom: auto;
+  top: -8px;
+  background: var(--cat);
+  border: 0;
+}
+.tooltip-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.rationale {
+  margin: 0;
+  color: var(--v-muted);
 }

@@ -1,19 +1,12 @@
-export type ScanResult = {
-  title: string;
-  url: string;
-  wordCount: number;
-  linkCount: number;
-  imageCount: number;
-};
+import { analyze, type Finding } from './analyze';
+import { extractPageContent, toAnalysisRequest, type PageContent } from './extract';
 
-/** Placeholder scan: collects basic page stats. Replace with the real analysis. */
+export type ScanResult = { content: PageContent; findings: Finding[] };
+
 export async function scanPage(): Promise<ScanResult> {
-  const text = document.body.innerText;
-  return {
-    title: document.title,
-    url: location.href,
-    wordCount: text.split(/\s+/).filter(Boolean).length,
-    linkCount: document.links.length,
-    imageCount: document.images.length,
-  };
+  const content = extractPageContent();
+  const request = toAnalysisRequest(content);
+  console.debug('[Verity] analysis request', request);
+  const findings = await analyze(request);
+  return { content, findings };
 }

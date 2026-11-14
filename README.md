@@ -34,8 +34,12 @@ If Chrome doesn't open, go to `chrome://extensions`, turn on Developer mode, cli
 entrypoints/
   background.ts      service worker: toolbar button click → inject content script → send scan message
   content/
-    index.ts         overlay panel (shadow DOM, isolated from page CSS)
-    scan.ts          scan logic (placeholder: page stats)
+    index.ts         overlay panel (shadow DOM, top layer): findings list, tooltip
+    scan.ts          scan pipeline: extract → analyze → findings
+    extract.ts       article text extraction (Readability) → sentences with live DOM ranges
+    analyze.ts       finding categories + analyzer (placeholder: random picks)
+    highlight.ts     on-page highlights (CSS Custom Highlight API, no DOM changes)
+    dither.ts        scan line + dither animation
     style.css        overlay styles
 utils/messages.ts    message types shared by background and content
 public/icon/         toolbar/extension icons

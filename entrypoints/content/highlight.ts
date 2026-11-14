@@ -1,0 +1,118 @@
+import { CATEGORIES, type Category, type Finding } from './analyze';
+import type { ArticleSentence } from './extract';
+
+/**
+ * On-page highlights via the CSS Custom Highlight API: ranges are painted by the browser
+ * without inserting any elements, so the page's DOM (and its React/Vue app) is untouched.
+ */
+
+const STYLE_ID = 'verity-highlight-style';
+const ACTIVE = 'verity-active';
+
+export type PlacedFinding = Finding & { range: Range; sentence: ArticleSentence };
+
+/** Resolves each finding to a live range (the quoted words if given, else the sentence) and paints them. */
+export function applyHighlights(findings: Finding[], sentences: ArticleSentence[]): PlacedFinding[] {
+  clearHighlights();
+  ensureStyle();
+
+  const placed: PlacedFinding[] = [];
+  const byCategory = new Map<Category, Range[]>();
+  for (const f of findings) {
+    const sentence = sentences[f.sentenceId];
+    if (!sentence) continue;
+    const range = (f.quote && findQuote(sentence.range, f.quote)) || sentence.range;
+    placed.push({ ...f, range, sentence });
+    byCategory.set(f.category, [...(byCategory.get(f.category) ?? []), range]);
+  }
+  for (const [category, ranges] of byCategory) CSS.highlights.set(name(category), new Highlight(...ranges));
+  return placed;
+}
+
+/** Emphasizes one finding (stronger fill in its category color). */
+export function setActiveHighlight(finding: PlacedFinding | null) {
+  CSS.highlights.delete(ACTIVE);
+  if (!finding) return;
+  const hl = new Highlight(finding.range);
+  hl.priority = 1;
+  CSS.highlights.set(ACTIVE, hl);
+  const style = ensureStyle();
+  style.textContent = css(finding.category);
+}
+
+export function clearHighlights() {
+  for (const id of Object.keys(CATEGORIES)) CSS.highlights.delete(name(id as Category));
+  CSS.highlights.delete(ACTIVE);
+  document.getElementById(STYLE_ID)?.remove();
+}
+
+const name = (c: Category) => `verity-${c}`;
+
+function ensureStyle(): HTMLStyleElement {
+  let style = document.getElementById(STYLE_ID) as HTMLStyleElement | null;
+  if (!style) {
+    style = document.createElement('style');
+    style.id = STYLE_ID;
+    style.textContent = css(null);
+    (document.head ?? document.documentElement).append(style);
+  }
+  return style;
+}
+
+function css(active: Category | null) {
+  const rules = Object.entries(CATEGORIES).map(
+    ([id, { color }]) => `::highlight(${name(id as Category)}) {
+      background-color: color-mix(in srgb, ${color} 22%, transparent);
+      text-decoration: underline 2px ${color};
+      text-underline-offset: 3px;
+    }`,
+  );
+  if (active) {
+    const { color } = CATEGORIES[active];
+    rules.push(`::highlight(${ACTIVE}) { background-color: color-mix(in srgb, ${color} 50%, transparent); color: inherit; }`);
+  }
+  return rules.join('\n');
+}
+
+/**
+ * Finds `quote` inside `range`, ignoring case and whitespace differences, and returns a
+ * sub-range covering it.
+ */
+function findQuote(range: Range, quote: string): Range | null {
+  const root = range.commonAncestorContainer;
+  const nodes: { node: Text; from: number; to: number }[] = [];
+  if (root.nodeType === Node.TEXT_NODE) {
+    nodes.push({ node: root as Text, from: range.startOffset, to: range.endOffset });
+  } else {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode() as Text | null; n; n = walker.nextNode() as Text | null) {
+      if (!range.intersectsNode(n)) continue;
+      const from = n === range.startContainer ? range.startOffset : 0;
+      const to = n === range.endContainer ? range.endOffset : n.length;
+      if (to > from) nodes.push({ node: n, from, to });
+    }
+  }
+
+  // Normalized text plus a map from each normalized char back to (node, offset).
+  let norm = '';
+  const map: { node: Text; offset: number }[] = [];
+  for (const { node, from, to } of nodes) {
+    const value = node.nodeValue ?? '';
+    for (let i = from; i < to; i++) {
+      const ch = /\s/.test(value[i]!) ? ' ' : value[i]!.toLowerCase();
+      if (ch === ' ' && norm.endsWith(' ')) continue;
+      norm += ch;
+      map.push({ node, offset: i });
+    }
+  }
+
+  const needle = quote.trim().replace(/\s+/g, ' ').toLowerCase();
+  const at = norm.indexOf(needle);
+  if (at < 0 || !needle) return null;
+  const start = map[at]!;
+  const last = map[at + needle.length - 1]!;
+  const sub = document.createRange();
+  sub.setStart(start.node, start.offset);
+  sub.setEnd(last.node, last.offset + 1);
+  return sub;
+}
