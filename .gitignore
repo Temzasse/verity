@@ -17,3 +17,5 @@ site/downloads/*.zip
 
 # Codex output
 output/
+
+pnpm-workspace.yaml
