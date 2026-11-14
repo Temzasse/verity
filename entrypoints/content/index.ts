@@ -230,7 +230,7 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
         ...(finding.source === 'quick' ? [el('span', 'tag', 'Quick')] : []),
         confidenceGauge(finding.confidence),
       ]),
-      ...(finding.technique ? [el('p', 'technique', finding.technique)] : []),
+      ...(showTechnique(finding) ? [el('p', 'technique', finding.technique)] : []),
       el('p', 'rationale', finding.rationale),
       ...(CHECKABLE.has(finding.category) ? [renderFactCheck(finding)] : []),
     );
@@ -262,7 +262,7 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
     const section = el('div', 'factcheck');
 
     if (!state || state.status === 'error') {
-      const button = el('button', 'check-button', state ? 'Retry fact-check' : 'Check this claim with web sources');
+      const button = el('button', 'check-button', state ? 'Retry fact-check' : 'Check with web sources');
       button.type = 'button';
       button.addEventListener('click', () => void runFactCheck(finding));
       if (state) section.append(el('p', 'error', state.error));
@@ -392,14 +392,16 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
     const quickPlaced = placed.filter((f) => f.source === 'quick');
 
     const children: Node[] = [
-      el('p', 'label', content.isArticle ? 'Article' : 'Page'),
-      el('p', 'title', content.title || location.hostname),
+      el('div', 'article-card', [
+        el('p', 'label', content.isArticle ? 'Article' : 'Page'),
+        el('p', 'title', content.title || location.hostname),
+      ]),
     ];
     if (!n) {
       children.push(el('p', 'muted', 'No article text found on this page.'));
     } else {
       // Quick findings first (they arrive first), then the smart analysis below them.
-      if (!quick) children.push(el('p', 'muted', 'Looking for quick findings…'));
+      if (!quick) children.push(el('p', 'status', 'Looking for quick findings…'));
       else if (!quick.ok) children.push(el('p', 'muted note', `Quick findings unavailable: ${quick.error}`));
       else if (quickPlaced.length) {
         children.push(
@@ -411,7 +413,7 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
         children.push(el('p', 'muted note', 'Quick findings: nothing flagged.'));
       }
 
-      if (!smart) children.push(el('p', 'muted status checking', 'Running smart analysis…'));
+      if (!smart) children.push(el('p', 'status', 'Running smart analysis…'));
       else if (!smart.ok) children.push(el('p', 'section-title', 'Smart analysis'), el('p', 'error', smart.error));
       else {
         children.push(
@@ -442,7 +444,7 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
       else if (alsoQuick.has(f.sentenceId)) head.splice(1, 0, el('span', 'tag', 'Also in Quick'));
       const button = el('button', `finding${f.source === 'quick' ? ' quick' : ''}`, [
         el('div', 'finding-head', head),
-        ...(f.technique ? [el('p', 'technique', f.technique)] : []),
+        ...(showTechnique(f) ? [el('p', 'technique', f.technique)] : []),
         el('p', 'excerpt', truncate(f.sentence.text, 140)),
       ]);
       button.type = 'button';
@@ -498,7 +500,7 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
       article = null;
       factChecks.clear();
       raise();
-      body.replaceChildren(el('p', 'muted status checking', 'Scanning page…'));
+      body.replaceChildren(el('p', 'status', 'Scanning page…'));
 
       const color = getComputedStyle(sweep).getPropertyValue('background-color');
       const scan = startScan();
@@ -554,4 +556,9 @@ function nextFrames(n: number) {
     const step = () => (--n <= 0 ? resolve() : requestAnimationFrame(step));
     requestAnimationFrame(step);
   });
+}
+
+/** The technique line is skipped when it only repeats the category label ("Loaded language" twice). */
+function showTechnique(f: { technique: string; category: keyof typeof CATEGORIES }) {
+  return !!f.technique && f.technique.trim().toLowerCase() !== CATEGORIES[f.category].label.toLowerCase();
 }

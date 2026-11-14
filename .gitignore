@@ -8,3 +8,8 @@ web-ext.config.ts
 server/.env
 server/.cache
 .env
+
+# Local agent skills
+.agents/
+.claude/
+skills-lock.json
