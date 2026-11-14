@@ -6,6 +6,8 @@ import type {
   FeedbackRequest,
   QuickRequest,
   QuickResponse,
+  VerifyRequest,
+  VerifyResponse,
 } from './analysis';
 
 /** Background → content script. */
@@ -19,6 +21,7 @@ export type ServerEndpoints = {
   '/analyze': { request: AnalysisRequest; response: AnalysisResponse };
   '/fact-check': { request: FactCheckRequest; response: FactCheckResponse };
   '/feedback': { request: FeedbackRequest; response: { ok: true } };
+  '/verify': { request: VerifyRequest; response: VerifyResponse };
 };
 export type ServerPath = keyof ServerEndpoints;
 

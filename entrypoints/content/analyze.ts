@@ -6,6 +6,8 @@ import type {
   FeedbackRequest,
   QuickRequest,
   QuickResponse,
+  VerifyRequest,
+  VerifyResponse,
 } from '@/utils/analysis';
 import type { QuickMessage, QuickReply, ServerEndpoints, ServerPath, ServerReply, ServerRequest } from '@/utils/messages';
 
@@ -48,4 +50,9 @@ export function factCheck(request: FactCheckRequest): Promise<FactCheckResponse>
 /** Records a reader's verdict on a finding (feeds the live false-positive numbers on the website). */
 export async function sendFeedback(request: FeedbackRequest): Promise<void> {
   await callServer('/feedback', request);
+}
+
+/** Re-scores on-device Quick findings with the server's independent confidence check. */
+export function verifyQuick(request: VerifyRequest): Promise<VerifyResponse> {
+  return callServer('/verify', request);
 }

@@ -47,7 +47,7 @@ const CATEGORY_CRITERIA = Object.fromEntries(CATEGORY_IDS.map((id) => [CATEGORIE
 const QUOTING_RULE =
   "Quoting or reporting someone else's words does not count unless the article itself adopts or amplifies them.";
 
-export async function verifyFindings(findings: Finding[], req: AnalysisRequest): Promise<Finding[]> {
+export async function verifyFindings(findings: Finding[], req: AnalysisRequest, label = 'smart'): Promise<Finding[]> {
   if (!VERIFIER_ENABLED || findings.length === 0) return findings;
   const started = Date.now();
   const state = articleState(req);
@@ -56,16 +56,16 @@ export async function verifyFindings(findings: Finding[], req: AnalysisRequest):
 
   let results: Finding[][];
   try {
-    results = await Promise.all(chunks.map((chunk) => verifyChunk(chunk, req, state)));
+    results = await Promise.all(chunks.map((chunk) => verifyChunk(chunk, req, state, label)));
   } catch (err) {
     console.warn(`[jev] verification failed, keeping the analysis model's confidence: ${err instanceof Error ? err.message : err}`);
     return findings;
   }
-  console.log(`[jev] checked ${findings.length} findings in ${Date.now() - started} ms; showing "${SCORE}" as confidence`);
+  console.log(`[jev] checked ${findings.length} ${label} findings in ${Date.now() - started} ms; showing "${SCORE}" as confidence`);
   return results.flat();
 }
 
-async function verifyChunk(findings: Finding[], req: AnalysisRequest, state: unknown): Promise<Finding[]> {
+async function verifyChunk(findings: Finding[], req: AnalysisRequest, state: unknown, label: string): Promise<Finding[]> {
   const byId = new Map(req.sentences.map((s) => [s.id, s]));
   const questions: Record<string, Question> = {};
   findings.forEach((f, i) => {
@@ -133,7 +133,7 @@ async function verifyChunk(findings: Finding[], req: AnalysisRequest, state: unk
   });
   const data = (await res.json().catch(() => null)) as (SystemOneResponse & { error?: unknown; message?: string }) | null;
   if (!res.ok || !data?.answers) throw new Error(`HTTP ${res.status} ${JSON.stringify(data?.error ?? data?.message ?? '')}`);
-  console.log(`[jev] ${data.model}: ${findings.length} findings, ${data.usage?.input_tokens ?? '?'} input tokens`);
+  console.log(`[jev] ${data.model}: ${findings.length} ${label} findings, ${data.usage?.input_tokens ?? '?'} input tokens`);
 
   return findings.map((f, i) => {
     const noul = (id: string) => {

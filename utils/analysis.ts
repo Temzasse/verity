@@ -260,6 +260,11 @@ export type FactCheckResponse = {
   searches: number;
 };
 
+/** Sent to POST /verify: on-device Quick findings to re-score with the independent confidence check. */
+export type VerifyRequest = { request: AnalysisRequest; findings: Finding[] };
+/** Returned by POST /verify. `checked` is false when the check is off or failed (findings unchanged). */
+export type VerifyResponse = { findings: Finding[]; checked: boolean };
+
 /** Sent to POST /feedback when a reader rates a finding. */
 export type FeedbackRequest = {
   vote: 'agree' | 'disagree';
