@@ -323,7 +323,7 @@ function fillCard(card, finding, index, state) {
   const showTechnique = finding.technique && finding.technique.toLowerCase() !== label.toLowerCase();
   const quote = finding.quote || state.sentences[finding.sentenceId].text;
   card.replaceChildren(
-    el('div', 'try-card-head', [chip(finding.category), confidence(finding)]),
+    el('div', 'try-card-head', [chip(finding.category)]),
     ...(showTechnique ? [el('p', 'try-technique', finding.technique)] : []),
     ...(techniques[finding.techniqueId] ? [el('p', 'try-technique-def', techniques[finding.techniqueId].definition)] : []),
     el('blockquote', 'try-quote', `“${quote.length > 160 ? `${quote.slice(0, 157)}…` : quote}”`),
@@ -333,56 +333,111 @@ function fillCard(card, finding, index, state) {
   );
 }
 
-function confidence(finding) {
-  const pct = Math.round(finding.confidence * 100);
-  const wrap = el('span', 'try-confidence', [el('span', 'try-confidence-bar'), `${pct}%`]);
-  wrap.title =
-    finding.verified && typeof finding.aiConfidence === 'number'
-      ? `Confidence ${pct}%, independently checked. The analysis itself estimated ${Math.round(finding.aiConfidence * 100)}%.`
-      : `Confidence ${pct}%`;
-  wrap.style.setProperty('--pct', `${pct}%`);
-  return wrap;
-}
+const VOTE_LABELS = { yes: 'Yes', no: 'No', unsure: 'Not sure' };
+
+/**
+ * "Is this finding relevant?" with three equally weighted answers. Other readers' answers appear only
+ * after this reader has answered, so they can't sway the vote. Answers can be changed.
+ */
+// Answers are final on the live site; changing them is allowed when served locally (development).
+const CAN_CHANGE_VOTE = ['localhost', '127.0.0.1'].includes(location.hostname);
 
 function feedbackRow(card, finding, index, state) {
+  // Buttons until the reader answers, then a bar of all readers' answers (never before answering).
+  // Fixed-height answer area so the card doesn't jump.
   const vote = state.votes.get(index);
   const row = el('div', 'try-feedback');
-  if (vote?.status === 'sending' || vote?.status === 'sent') {
-    row.append(
-      el('span', 'try-feedback-label', vote.status === 'sending' ? 'Sending…' : vote.vote === 'agree' ? 'Thanks! Marked as a fair flag.' : 'Thanks! Marked as a false flag.'),
+  row.append(el('span', 'try-feedback-label', 'Is this finding relevant?'));
+  const area = el('div', 'try-vote-area');
+  if (vote?.status === 'sent') {
+    area.append(
+      voteResults(vote.vote, vote.tally, CAN_CHANGE_VOTE ? () => {
+        state.votes.delete(index);
+        fillCard(card, finding, index, state);
+      } : null),
     );
-    return row;
+  } else {
+    const chosen = vote?.status === 'sending' ? vote.vote : null;
+    for (const choice of ['yes', 'no', 'unsure']) {
+      const b = el('button', 'try-vote', VOTE_LABELS[choice]);
+      b.type = 'button';
+      b.setAttribute('aria-pressed', String(chosen === choice));
+      b.disabled = vote?.status === 'sending';
+      b.addEventListener('click', async () => {
+        state.votes.set(index, { status: 'sending', vote: choice });
+        fillCard(card, finding, index, state);
+        try {
+          const { tally } = await api('/feedback', {
+            vote: choice,
+            voterId: voterId(),
+            url: state.article.url,
+            sentence: state.sentences[finding.sentenceId].text,
+            ...(finding.quote ? { quote: finding.quote } : {}),
+            category: finding.category,
+            technique: finding.technique || CATEGORIES[finding.category].label,
+            confidence: finding.confidence,
+            source: 'smart',
+            client: 'web',
+          });
+          state.votes.set(index, { status: 'sent', vote: choice, tally });
+          void initStats();
+        } catch (err) {
+          state.votes.set(index, { status: 'error', error: err.message });
+        }
+        fillCard(card, finding, index, state);
+      });
+      area.append(b);
+    }
   }
-  const button = (choice, text) => {
-    const b = el('button', 'try-vote', text);
-    b.type = 'button';
-    b.addEventListener('click', async () => {
-      state.votes.set(index, { status: 'sending', vote: choice });
-      fillCard(card, finding, index, state);
-      try {
-        await api('/feedback', {
-          vote: choice,
-          url: state.article.url,
-          sentence: state.sentences[finding.sentenceId].text,
-          ...(finding.quote ? { quote: finding.quote } : {}),
-          category: finding.category,
-          technique: finding.technique || CATEGORIES[finding.category].label,
-          confidence: finding.confidence,
-          source: 'smart',
-          client: 'web',
-        });
-        state.votes.set(index, { status: 'sent', vote: choice });
-        void initStats();
-      } catch (err) {
-        state.votes.set(index, { status: 'error', error: err.message });
-      }
-      fillCard(card, finding, index, state);
-    });
-    return b;
-  };
-  row.append(el('span', 'try-feedback-label', 'Is this flag right?'), button('agree', 'Yes'), button('disagree', 'No'));
+  row.append(area);
   if (vote?.status === 'error') row.append(el('p', 'try-error', vote.error));
   return row;
+}
+
+/** Stacked bar of all readers' answers (green yes, red no, gray not sure) with the reader's own answer. */
+function voteResults(own, tally, onChange) {
+  const total = tally.yes + tally.no + tally.unsure || 1;
+  const pct = (v) => Math.round((tally[v] / total) * 100);
+  const order = ['yes', 'no', 'unsure'];
+  const bar = el('div', 'try-vote-bar');
+  bar.setAttribute('role', 'img');
+  bar.setAttribute(
+    'aria-label',
+    `Readers: ${pct('yes')}% yes, ${pct('no')}% no, ${pct('unsure')}% not sure (${total} ${total === 1 ? 'vote' : 'votes'}). You said ${VOTE_LABELS[own]}.`,
+  );
+  for (const v of order) {
+    if (!tally[v]) continue;
+    const seg = el('span', `try-vote-seg is-${v}`);
+    seg.style.flexGrow = String(tally[v]);
+    seg.title = `${VOTE_LABELS[v]}: ${tally[v]} (${pct(v)}%)`;
+    bar.append(seg);
+  }
+  const legend = el('span', 'try-vote-legend', order.map((v) => el('span', `try-vote-pct is-${v}`, `${pct(v)}%`)));
+  const caption = el('div', 'try-vote-caption', [el('strong', null, `You said ${VOTE_LABELS[own]}`), legend]);
+  if (onChange) {
+    const change = el('button', 'try-vote-change', 'Change');
+    change.type = 'button';
+    change.title = 'Only when running locally';
+    change.addEventListener('click', onChange);
+    caption.append(change);
+  }
+  return el('div', 'try-vote-results', [bar, caption]);
+}
+
+/** Random id for this browser so each reader has one (changeable) vote per finding; not linked to anything else. */
+let sessionVoterId;
+function voterId() {
+  try {
+    let id = localStorage.getItem('verity-voter');
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem('verity-voter', id);
+    }
+    return id;
+  } catch {
+    sessionVoterId ??= crypto.randomUUID();
+    return sessionVoterId;
+  }
 }
 
 function factCheckSection(card, finding, index, state) {
@@ -441,17 +496,19 @@ async function initStats() {
     const node = root.querySelector(`[data-stat="${name}"]`);
     if (node) node.textContent = value;
   };
-  const votes = stats.feedback.agree + stats.feedback.disagree;
+  const { yes, no, unsure } = stats.feedback;
+  const votes = yes + no + unsure;
+  const decided = yes + no; // "Not sure" answers are counted but left out of the rate
   set('analyses', fmt(stats.analyses));
   set('sentences', fmt(stats.sentences));
   set('findings', fmt(stats.findings));
   set('votes', fmt(votes));
-  set('false-flags', votes ? `${Math.round((stats.feedback.disagree / votes) * 100)}%` : '–');
+  set('false-flags', decided ? `${Math.round((no / decided) * 100)}%` : '–');
   const since = new Date(stats.since).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
   root.querySelector('[data-stat-note]').textContent =
-    votes < 10
-      ? `Counted since ${since}. Too few reader votes yet for a meaningful false-flag rate: rate a few findings above to add yours.`
-      : `Counted since ${since}. False-flag rate = share of reader votes saying a flag was wrong.`;
+    decided < 10
+      ? `Counted since ${since}. Too few reader answers yet for a meaningful rate: answer "Is this finding relevant?" on a few findings above to add yours.`
+      : `Counted since ${since}. Share of readers who answered "No" to "Is this finding relevant?" (one vote per reader per finding; "Not sure" left out).`;
 }
 
 const fmt = (n) => n.toLocaleString('en-GB');

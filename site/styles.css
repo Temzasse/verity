@@ -655,6 +655,77 @@ button.button:disabled {
   }
 }
 .try-status.is-error,
+.try-vote:disabled {
+  cursor: progress;
+}
+.try-vote-area {
+  display: flex;
+  flex-basis: 100%;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+}
+.try-vote[aria-pressed='true'] {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  box-shadow: inset 0 0 0 1.5px rgb(79 124 240 / 0.45);
+}
+.try-vote:disabled {
+  cursor: progress;
+}
+.try-vote-results {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+}
+.try-vote-bar {
+  display: flex;
+  gap: 2px;
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--tile);
+}
+.try-vote-seg {
+  min-width: 4px;
+}
+.try-vote-seg.is-yes { background: #3fb67b; }
+.try-vote-seg.is-no { background: #e5676b; }
+.try-vote-seg.is-unsure { background: #c7c7cc; }
+.try-vote-caption {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1;
+}
+.try-vote-caption strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+.try-vote-legend {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.try-vote-pct.is-yes { color: #2f9e67; }
+.try-vote-pct.is-no { color: #d4555a; }
+.try-vote-pct.is-unsure { color: var(--faint); }
+.try-vote-change {
+  border: 0;
+  background: none;
+  color: var(--accent-text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.try-vote-change:hover {
+  text-decoration: underline;
+}
 .try-error {
   background: #fff1f0;
   color: #b42318;
@@ -751,20 +822,6 @@ button.button:disabled {
   justify-content: space-between;
   gap: 10px;
 }
-.try-confidence {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--muted);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-}
-.try-confidence-bar {
-  width: 40px;
-  height: 5px;
-  border-radius: 999px;
-  background: linear-gradient(var(--accent), var(--accent)) left / var(--pct) 100% no-repeat, var(--tile);
-}
 .try-technique {
   margin-top: 10px;
   font-weight: 600;
@@ -830,7 +887,8 @@ button.button:disabled {
   border-top: 1px solid var(--line);
 }
 .try-feedback-label {
-  margin-right: auto;
+  flex-basis: 100%;
+  margin-bottom: 2px;
   color: var(--muted);
   font-size: 12px;
 }

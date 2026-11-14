@@ -4,10 +4,9 @@ import type { ContentScriptContext } from 'wxt/utils/content-script-context';
 import { CAPTURE_MESSAGE, type VerityMessage } from '@/utils/messages';
 import { startScan, type Outcome } from './scan';
 import { playScanEffect } from './dither';
-import type { AnalysisResponse, Category, FactCheckResponse, QuickResponse } from '@/utils/analysis';
+import type { AnalysisResponse, Category, FactCheckResponse, QuickResponse, Vote, VoteTally } from '@/utils/analysis';
 import { CATEGORIES, VERDICTS, factCheck, sendFeedback } from './analyze';
 import { TECHNIQUES } from '@/utils/analysis';
-import { confidenceGauge } from './gauge';
 import type { PageContent } from './extract';
 import { applyHighlights, clearHighlights, setActiveHighlight, type PlacedFinding } from './highlight';
 import { clearResult } from './clear-result';
@@ -23,8 +22,13 @@ type ViewState = {
   smart: Outcome<AnalysisResponse> | null;
 };
 
-/** A reader's vote on one finding: in flight, recorded, or failed (buttons shown again with the error). */
-type VoteState = { vote: 'agree' | 'disagree'; status: 'sending' | 'sent' } | { status: 'error'; error: string };
+/** The reader's answer to "Is this finding relevant?": in flight, recorded (with everyone's answers), or failed. */
+type VoteState =
+  | { status: 'sending'; vote: Vote }
+  | { status: 'sent'; vote: Vote; tally: VoteTally }
+  | { status: 'error'; error: string };
+
+const VOTE_LABELS: Record<Vote, string> = { yes: 'Yes', no: 'No', unsure: 'Not sure' };
 
 type FactCheckState =
   | { status: 'loading' }
@@ -214,29 +218,52 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
     const rects = active.range.getClientRects();
     const rect = rects[0] ?? active.range.getBoundingClientRect();
     if (!rect || (rect.width === 0 && rect.height === 0)) return;
+    tooltip.style.maxHeight = ''; // measure the natural height
     const tw = tooltip.offsetWidth;
     const th = tooltip.offsetHeight;
     const gap = 10;
     const margin = 8;
-    // Sit outside the spotlit paragraph so the reader always sees the whole passage: above it if
-    // there's room, else below it, else (paragraph taller than the viewport) next to the highlight.
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    // Never cover the spotlit paragraph, so the reader always sees the whole passage. In order:
+    // above it, below it, beside it (wide pages), then in the taller free band above/below with the
+    // tooltip scrolling inside; only if there's no room at all does it sit next to the highlight.
     const box = spotlightBox(active);
-    let below: boolean;
+    const centeredLeft = Math.min(Math.max(margin, rect.left + Math.min(rect.width, 240) / 2 - tw / 2), vw - tw - margin);
+    const spaceAbove = box.top - gap - margin;
+    const spaceBelow = vh - box.bottom - gap - margin;
+    let place: 'above' | 'below' | 'side';
     let top: number;
-    if (box.top - gap - th >= margin) {
-      below = false;
+    let left = centeredLeft;
+    let maxHeight: number | null = null;
+    if (th <= spaceAbove) {
+      place = 'above';
       top = box.top - gap - th;
-    } else if (box.bottom + gap + th <= window.innerHeight - margin) {
-      below = true;
+    } else if (th <= spaceBelow) {
+      place = 'below';
       top = box.bottom + gap;
+    } else if (vw - box.right - gap - margin >= tw || box.left - gap - margin >= tw) {
+      place = 'side';
+      left = vw - box.right - gap - margin >= tw ? box.right + gap : box.left - gap - tw;
+      top = Math.min(Math.max(margin, rect.top - 20), vh - th - margin);
+      if (th > vh - margin * 2) {
+        top = margin;
+        maxHeight = vh - margin * 2;
+      }
+    } else if (Math.max(spaceAbove, spaceBelow) >= 180) {
+      place = spaceBelow >= spaceAbove ? 'below' : 'above';
+      maxHeight = place === 'below' ? spaceBelow : spaceAbove;
+      top = place === 'below' ? box.bottom + gap : margin;
     } else {
-      below = rect.top - th - gap < margin;
-      top = below ? rect.bottom + gap : rect.top - th - gap;
+      place = rect.top - th - gap < margin ? 'below' : 'above';
+      top = place === 'below' ? rect.bottom + gap : rect.top - th - gap;
     }
-    const left = Math.min(Math.max(margin, rect.left + Math.min(rect.width, 240) / 2 - tw / 2), window.innerWidth - tw - margin);
+    if (maxHeight !== null) tooltip.style.maxHeight = `${maxHeight}px`;
     tooltip.style.left = `${left}px`;
     tooltip.style.top = `${top}px`;
-    tooltip.classList.toggle('below', below);
+    tooltip.classList.toggle('below', place === 'below');
+    tooltip.classList.toggle('side', place === 'side');
+    tooltip.classList.toggle('capped', maxHeight !== null);
     tooltip.style.setProperty('--arrow-x', `${Math.min(Math.max(12, rect.left + 12 - left), tw - 12)}px`);
   }
 
@@ -261,12 +288,6 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
       el('div', 'tooltip-head', [
         chip(finding.category),
         ...(finding.source === 'quick' ? [el('span', 'tag', 'Quick')] : []),
-        confidenceGauge(
-          finding.confidence,
-          finding.verified && finding.aiConfidence !== undefined
-            ? `Independently checked. The analysis itself estimated ${Math.round(finding.aiConfidence * 100)}%.`
-            : undefined,
-        ),
       ]),
       ...(showTechnique(finding) ? [el('p', 'technique', finding.technique)] : []),
       ...(finding.techniqueId ? [el('p', 'technique-def', TECHNIQUES[finding.techniqueId].definition)] : []),
@@ -315,38 +336,49 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
     return section;
   }
 
-  /** "Is this flag right?" row: reader votes feed the live false-positive rate shown on the website. */
+  /**
+   * "Is this finding relevant?" with three equally weighted answers. Other readers' answers are shown only
+   * after this reader has answered, so they can't sway the vote. Answers can be changed.
+   */
   function renderFeedback(finding: PlacedFinding): HTMLElement {
+    // "Is this finding relevant?": three equal buttons until the reader answers, then a bar of how all
+    // readers answered (never shown before answering, so it can't sway the vote). The answer area has a
+    // fixed height so the tooltip doesn't jump. Answers are final in the published extension; local
+    // development builds can change them for testing.
     const state = votes.get(findingKey(finding));
     const row = el('div', 'feedback');
-    if (state && state.status !== 'error') {
-      row.append(
-        el(
-          'p',
-          'feedback-thanks',
-          state.status === 'sending' ? 'Sending…' : state.vote === 'agree' ? 'Thanks! Marked as a fair flag.' : 'Thanks! Marked as a false flag.',
-        ),
-      );
-      return row;
+    row.append(el('span', 'feedback-label', 'Is this finding relevant?'));
+    const area = el('div', 'vote-area');
+    if (state?.status === 'sent') {
+      area.append(voteResults(state.vote, state.tally, import.meta.env.DEV ? () => {
+        votes.delete(findingKey(finding));
+        refreshFinding(finding);
+      } : null));
+    } else {
+      const chosen = state?.status === 'sending' ? state.vote : null;
+      for (const vote of ['yes', 'no', 'unsure'] as const) {
+        const b = el('button', 'vote-button', VOTE_LABELS[vote]);
+        b.type = 'button';
+        b.setAttribute('aria-pressed', String(chosen === vote));
+        b.disabled = state?.status === 'sending';
+        b.addEventListener('click', () => void castVote(finding, vote));
+        area.append(b);
+      }
     }
-    const button = (vote: 'agree' | 'disagree', label: string) => {
-      const b = el('button', 'vote-button', label);
-      b.type = 'button';
-      b.addEventListener('click', () => void castVote(finding, vote));
-      return b;
-    };
-    row.append(el('span', 'feedback-label', 'Is this flag right?'), button('agree', 'Yes'), button('disagree', 'No'));
+    row.append(area);
     if (state?.status === 'error') row.append(el('p', 'error', state.error));
     return row;
   }
 
-  async function castVote(finding: PlacedFinding, vote: 'agree' | 'disagree') {
+
+
+  async function castVote(finding: PlacedFinding, vote: Vote) {
     const key = findingKey(finding);
     if (!article) return;
     votes.set(key, { vote, status: 'sending' });
     refreshFinding(finding);
     try {
-      await sendFeedback({
+      const { tally } = await sendFeedback({
         vote,
         url: article.url,
         sentence: finding.sentence.text,
@@ -357,7 +389,7 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
         source: finding.source ?? 'smart',
         client: 'extension',
       });
-      votes.set(key, { vote, status: 'sent' });
+      votes.set(key, { vote, status: 'sent', tally });
     } catch (err) {
       votes.set(key, { status: 'error', error: err instanceof Error ? err.message : String(err) });
     }
@@ -516,7 +548,7 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
   function findingList(findings: PlacedFinding[], alsoQuick: Set<number>) {
     const list = el('ol', 'findings');
     for (const f of findings) {
-      const head = [chip(f.category), el('span', 'confidence', `${Math.round(f.confidence * 100)}%`)];
+      const head = [chip(f.category)];
       if (f.source === 'quick') head.splice(1, 0, el('span', 'tag', 'Quick'));
       else if (alsoQuick.has(f.sentenceId)) head.splice(1, 0, el('span', 'tag', 'Also in Quick'));
       const button = el('button', `finding${f.source === 'quick' ? ' quick' : ''}`, [
@@ -649,4 +681,38 @@ function nextFrames(n: number) {
 /** The technique line is skipped when it only repeats the category label ("Loaded language" twice). */
 function showTechnique(f: { technique: string; category: keyof typeof CATEGORIES }) {
   return !!f.technique && f.technique.trim().toLowerCase() !== CATEGORIES[f.category].label.toLowerCase();
+}
+
+/** Stacked bar of all readers' answers (green yes, red no, gray not sure) with the reader's own answer. */
+function voteResults(own: Vote, tally: VoteTally, onChange: (() => void) | null): HTMLElement {
+  const total = tally.yes + tally.no + tally.unsure || 1;
+  const pct = (v: Vote) => Math.round((tally[v] / total) * 100);
+  const order = ['yes', 'no', 'unsure'] as const;
+  const bar = el('div', 'vote-bar');
+  bar.setAttribute('role', 'img');
+  bar.setAttribute(
+    'aria-label',
+    `Readers: ${pct('yes')}% yes, ${pct('no')}% no, ${pct('unsure')}% not sure (${total} ${total === 1 ? 'vote' : 'votes'}). You said ${VOTE_LABELS[own]}.`,
+  );
+  for (const v of order) {
+    if (!tally[v]) continue;
+    const seg = el('span', `vote-seg vote-${v}`);
+    seg.style.flexGrow = String(tally[v]);
+    seg.title = `${VOTE_LABELS[v]}: ${tally[v]} (${pct(v)}%)`;
+    bar.append(seg);
+  }
+  const legend = el(
+    'span',
+    'vote-legend',
+    order.map((v) => el('span', `vote-pct vote-${v}`, `${pct(v)}%`)),
+  );
+  const caption = el('div', 'vote-caption', [el('strong', null, `You said ${VOTE_LABELS[own]}`), legend]);
+  if (onChange) {
+    const change = el('button', 'vote-change', 'Change');
+    change.type = 'button';
+    change.title = 'Only in development builds';
+    change.addEventListener('click', onChange);
+    caption.append(change);
+  }
+  return el('div', 'vote-results', [bar, caption]);
 }
