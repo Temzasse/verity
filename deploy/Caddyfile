@@ -6,7 +6,10 @@
 	encode zstd gzip
 
 	handle_path /api/* {
-		reverse_proxy server:8787
+		reverse_proxy server:8787 {
+			# Forward fact-check JSON heartbeats immediately while research runs.
+			flush_interval -1
+		}
 	}
 
 	handle {

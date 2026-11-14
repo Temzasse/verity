@@ -5,7 +5,7 @@ import type { AnalysisRequest, FactCheckRequest } from '../utils/analysis.ts';
 
 /** File-based result cache + daily spend tracking, so dev restarts don't re-spend credits. */
 
-const DIR = join(import.meta.dirname, '.cache');
+const DIR = process.env.VERITY_CACHE_DIR || join(import.meta.dirname, '.cache');
 const SPEND_FILE = join(DIR, 'spend.json');
 
 export function cacheKey(model: string, promptVersion: string, req: AnalysisRequest): string {
@@ -17,7 +17,7 @@ export function cacheKey(model: string, promptVersion: string, req: AnalysisRequ
 
 export function factCheckKey(model: string, promptVersion: string, req: FactCheckRequest): string {
   return createHash('sha256')
-    .update(`fact-check\n${model}\n${promptVersion}\n${req.url}\n${req.claim}\n${req.context}`)
+    .update(`fact-check\n${model}\n${promptVersion}\n${JSON.stringify(req)}`)
     .digest('hex')
     .slice(0, 32);
 }

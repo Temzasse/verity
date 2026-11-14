@@ -13,6 +13,7 @@
     <link rel="icon" type="image/svg+xml" href="assets/verity-mark.svg" />
     <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png" />
     <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="fact-check.css" />
   </head>
   <body>
     <header class="nav">
@@ -126,8 +127,8 @@
               <span class="step-number">3</span>
               <h3>Fact-check with sources</h3>
               <p>
-                For factual claims, ask Verity to check them against the web. You get a verdict (supported, contradicted, disputed or couldn’t
-                verify) with links to the sources it used.
+                For factual claims, ask Verity to check published fact-checks and web sources. Each claim gets its own assessment, explanation,
+                and links to the evidence used. Conflicting sources are shown as mixed evidence.
               </p>
             </article>
           </div>
@@ -165,8 +166,8 @@
               <p>Technically true but misleading: cherry-picked statistics, missing baselines, one-sided framing.</p>
             </div>
             <div class="technique">
-              <span class="chip" style="--cat: #ea580c">Misinformation</span>
-              <p>Only when web sources contradict a claim. Without evidence either way, it stays an unsupported claim.</p>
+              <span class="chip" style="--cat: #ea580c">Claim to check</span>
+              <p>A factual assertion worth verifying. This flag alone does not mean the claim is false.</p>
             </div>
           </div>
         </div>
@@ -193,10 +194,10 @@
               </p>
             </div>
             <div class="card honest">
-              <h3>“Misinformation” needs evidence</h3>
+              <h3>Factual verdicts need evidence</h3>
               <p>
-                A claim is only called misinformation when sources found on the web contradict it, and those sources are shown to you. Everything
-                else is labelled as unsupported or disputed.
+                The initial scan identifies claims to check. Factual verdicts require external evidence, with sources shown to you. Model
+                confidence alone does not establish whether a claim is true or false.
               </p>
             </div>
             <div class="card honest">
@@ -296,7 +297,7 @@
       </div>
     </footer>
 
-    <script src="try.js" defer></script>
+    <script src="try.js" type="module"></script>
     <script>
       // Footer API status: a live check against the analysis server.
       (async () => {

@@ -89,23 +89,32 @@ async function runQuick(body: QuickMessage['body']): Promise<QuickReply> {
 }
 
 async function callServer({ path, body }: ServerRequest): Promise<ServerReply> {
-  let res: Response;
+  // Research can outlive MV3's idle timeout. Keep only this operation alive,
+  // including response-body reading, following Chrome's scoped waitUntil pattern.
+  const keepAlive = path === '/fact-check'
+    ? setInterval(() => { void browser.runtime.getPlatformInfo().catch(() => {}); }, 25_000)
+    : undefined;
   try {
-    res = await fetch(`${API_URL}${path}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(import.meta.env.WXT_API_TOKEN ? { 'X-Verity-Token': import.meta.env.WXT_API_TOKEN } : {}),
-      },
-      body: JSON.stringify(body),
-    });
-  } catch (err) {
-    console.warn('[Verity] fetch failed', err);
-    return { ok: false, error: `Can't reach the analysis server at ${API_URL}. Start it with \`pnpm server\`.` };
+    let res: Response;
+    try {
+      res = await fetch(`${API_URL}${path}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(import.meta.env.WXT_API_TOKEN ? { 'X-Verity-Token': import.meta.env.WXT_API_TOKEN } : {}),
+        },
+        body: JSON.stringify(body),
+      });
+    } catch (err) {
+      console.warn('[Verity] fetch failed', err);
+      return { ok: false, error: `Can't reach the analysis server at ${API_URL}. Start it with \`pnpm server\`.` };
+    }
+    const data = (await res.json().catch(() => null)) as { error?: string } | null;
+    if (!res.ok || !data || data.error) return { ok: false, error: data?.error ?? `Analysis server error ${res.status}` };
+    return { ok: true, data } as ServerReply;
+  } finally {
+    if (keepAlive !== undefined) clearInterval(keepAlive);
   }
-  const data = (await res.json().catch(() => null)) as { error?: string } | null;
-  if (!res.ok || !data) return { ok: false, error: data?.error ?? `Analysis server error ${res.status}` };
-  return { ok: true, data } as ServerReply;
 }
 
 async function sendScan(tabId: number) {

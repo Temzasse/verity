@@ -11,8 +11,8 @@ export const CATEGORIES = {
     color: '#dc2626',
   },
   misinformation: {
-    label: 'Misinformation',
-    description: 'Claim that is false or contradicts reliable sources.',
+    label: 'Claim to check',
+    description: 'A factual assertion worth checking against external evidence; no judgment of falsity.',
     color: '#ea580c',
   },
   'unsupported-claim': {
@@ -143,9 +143,10 @@ export const TECHNIQUES = {
   },
   // Misinformation
   'false-claim': {
-    label: 'False claim',
+    // Retain the stored id for compatibility; the initial scan does not establish falsity.
+    label: 'Claim to check',
     category: 'misinformation',
-    definition: 'A claim that contradicts well-established, widely documented facts.',
+    definition: 'A specific factual assertion that warrants verification against external sources. This flag does not establish that it is false.',
   },
 } as const satisfies Record<string, { label: string; category: Category; definition: string }>;
 
@@ -204,6 +205,8 @@ export type AnalysisResponse = {
 
 /** Sent to POST /fact-check for one claim. */
 export type FactCheckRequest = {
+  /** Version 2 returns per-claim results; omitted by older installed extensions. */
+  version?: 2;
   url: string;
   title: string;
   publishedTime: string | null;
@@ -216,7 +219,8 @@ export type FactCheckRequest = {
 export const VERDICTS = {
   supported: { label: 'Supported by sources', color: '#16a34a' },
   contradicted: { label: 'Contradicted by sources', color: '#dc2626' },
-  disputed: { label: 'Disputed or misleading', color: '#d97706' },
+  disputed: { label: 'Needs context', color: '#d97706' },
+  mixed: { label: 'Mixed evidence', color: '#d97706' },
   unverifiable: { label: "Couldn't verify", color: '#64748b' },
 } as const;
 
@@ -224,11 +228,32 @@ export type Verdict = keyof typeof VERDICTS;
 
 export type FactCheckSource = { url: string; title: string; citedText?: string };
 
-/** Returned by POST /fact-check. */
-export type FactCheckResponse = {
+export type PublishedClaimReview = {
+  id: string;
+  claim: string;
+  claimant?: string;
+  claimDate?: string;
+  publisher: string;
+  url: string;
+  title: string;
+  reviewDate?: string;
+  rating: string;
+  status: 'used' | 'related' | 'unavailable';
+  explanation: string;
+};
+
+export type ClaimAssessment = {
+  claim: string;
   verdict: Verdict;
   summary: string;
   sources: FactCheckSource[];
+  reviews: PublishedClaimReview[];
+  reviewSearchStatus: 'complete' | 'unavailable' | 'not-configured';
+};
+
+/** Returned by POST /fact-check. */
+export type FactCheckResponse = {
+  claims: ClaimAssessment[];
   model: string;
   cached: boolean;
   costUsd: number;

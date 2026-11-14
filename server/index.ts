@@ -14,7 +14,7 @@ import {
 } from '../utils/analysis.ts';
 import { AnalysisError, MODEL, analyzeWithClaude } from './claude.ts';
 import { extractArticle, type ExtractedArticle } from './extract.ts';
-import { FACT_CHECK_PROMPT, factCheckWithClaude } from './factcheck.ts';
+import { FACT_CHECK_VERSION as FACT_CHECK_CONFIG, factCheckWithClaude } from './factcheck.ts';
 import { SYSTEM_PROMPT } from './prompt.ts';
 import { VERIFIER_ENABLED, VERIFIER_VERSION, verifyFindings } from './verify.ts';
 import { addSpend, cacheKey, extractKey, factCheckKey, getCached, getStats, putCached, recordAnalysis, recordFeedback, spentToday } from './store.ts';
@@ -27,6 +27,7 @@ const TOKEN = process.env.VERITY_TOKEN;
 const MAX_BODY_BYTES = 1_000_000;
 /** How long a scraped "Try it" article is reused before the page is fetched again. */
 const EXTRACT_CACHE_MS = Number(process.env.EXTRACT_CACHE_HOURS ?? 12) * 3_600_000;
+const FACT_CHECK_CACHE_MS = 6 * 3_600_000;
 /** Requests per client IP per hour. For analyze/fact-check only paid (uncached) requests count. */
 const RATE_LIMITS = {
   analyze: Number(process.env.RATE_ANALYZE_PER_HOUR ?? 30),
@@ -36,7 +37,7 @@ const RATE_LIMITS = {
 };
 // Changing a prompt invalidates its cached results.
 const PROMPT_VERSION = createHash('sha256').update(SYSTEM_PROMPT).digest('hex').slice(0, 8);
-const FACT_CHECK_VERSION = createHash('sha256').update(FACT_CHECK_PROMPT).digest('hex').slice(0, 8);
+const FACT_CHECK_VERSION = createHash('sha256').update(FACT_CHECK_CONFIG).digest('hex').slice(0, 8);
 
 const RequestSchema = z.object({
   url: z.string().max(4000),
@@ -53,6 +54,7 @@ const RequestSchema = z.object({
 }) satisfies z.ZodType<AnalysisRequest>;
 
 const FactCheckSchema = z.object({
+  version: z.literal(2).optional(),
   url: z.string().max(4000),
   title: z.string().max(1000),
   publishedTime: z.string().max(100).nullable(),
@@ -78,7 +80,7 @@ if (!process.env.ANTHROPIC_API_KEY) {
   console.warn('[server] ANTHROPIC_API_KEY is not set. Copy server/.env.example to server/.env and add your key.');
 }
 
-createServer(async (req, res) => {
+export const server = createServer(async (req, res) => {
   try {
     if (req.method === 'GET' && req.url === '/health') {
       return json(res, 200, { ok: true, model: MODEL, spentTodayUsd: await spentToday(), dailyBudgetUsd: DAILY_BUDGET_USD });
@@ -95,7 +97,9 @@ createServer(async (req, res) => {
     console.error('[server]', err);
     json(res, 500, { error: 'Internal server error' });
   }
-}).listen(PORT, HOST, () => {
+});
+
+if (import.meta.main) server.listen(PORT, HOST, () => {
   console.log(
     `[server] Verity analysis server on http://${HOST}:${PORT} (model ${MODEL}, budget $${DAILY_BUDGET_USD}/day, ` +
       `confidence: ${VERIFIER_ENABLED ? VERIFIER_VERSION : 'analysis model'})`,
@@ -149,23 +153,53 @@ async function handleFactCheck(req: IncomingMessage, res: ServerResponse) {
   const body = parsed.data;
 
   const key = factCheckKey(MODEL, FACT_CHECK_VERSION, body);
-  const cached = await getCached<Omit<FactCheckResponse, 'cached' | 'costUsd'>>(key);
-  if (cached) {
+  const cached = await getCached<Omit<FactCheckResponse, 'cached' | 'costUsd'> & { checkedAt: number }>(key);
+  if (cached && Date.now() - cached.checkedAt < FACT_CHECK_CACHE_MS) {
     console.log(`[server] fact-check cache hit ${key}`);
-    return json(res, 200, { ...cached, cached: true, costUsd: 0 } satisfies FactCheckResponse);
+    return sendFactCheck(res, { ...cached, cached: true, costUsd: 0 }, body.version);
   }
   if (rateLimited(req, res, 'fact-check') || (await overBudget(res))) return;
 
   console.log(`[server] fact-checking: "${body.claim.slice(0, 100)}"`);
   const started = Date.now();
-  const { costUsd, ...result } = await factCheckWithClaude(body);
-  await addSpend(costUsd);
-  const stored = { ...result, model: MODEL };
-  await putCached(key, stored);
-  console.log(
-    `[server] verdict ${result.verdict} (${result.sources.length} sources, ${result.searches} searches) in ${Date.now() - started} ms, today $${(await spentToday()).toFixed(4)}`,
-  );
-  json(res, 200, { ...stored, cached: false, costUsd } satisfies FactCheckResponse);
+  // Whitespace is valid before a JSON document. Flush it while research runs so the
+  // MV3 worker receives a response within Chrome's 30-second fetch window.
+  const heartbeat = setInterval(() => {
+    if (!res.headersSent) res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    res.write('\n');
+  }, Number(process.env.FACT_CHECK_HEARTBEAT_MS ?? 10_000));
+  heartbeat.unref();
+  res.once('close', () => clearInterval(heartbeat));
+  try {
+    const { costUsd, ...result } = await factCheckWithClaude(body);
+    const stored = { ...result, model: MODEL, checkedAt: Date.now() };
+    if (result.claims.every((c) => c.reviewSearchStatus !== 'unavailable' && c.reviews.every((r) => r.status !== 'unavailable'))) {
+      await putCached(key, stored);
+    }
+    console.log(
+      `[server] checked ${result.claims.length} claims (${result.searches} searches) in ${Date.now() - started} ms, today $${(await spentToday()).toFixed(4)}`,
+    );
+    sendFactCheck(res, { ...stored, cached: false, costUsd }, body.version);
+  } catch (err) {
+    if (!res.headersSent) throw err;
+    // Once the heartbeat sent headers, the error must travel in the JSON body.
+    const error = err instanceof AnalysisError ? err : new AnalysisError('The fact-check could not finish. Try again.', 500);
+    json(res, 200, { error: error.message, errorStatus: error.status, verdict: 'unverifiable', summary: error.message, sources: [] });
+  } finally {
+    clearInterval(heartbeat);
+  }
+}
+
+/** Older installations need their original fields until readers update the extension. */
+function sendFactCheck(res: ServerResponse, data: FactCheckResponse, version?: 2) {
+  if (version === 2) return json(res, 200, data);
+  const single = data.claims.length === 1 ? data.claims[0] : undefined;
+  const summary = single?.summary ?? (data.claims.length
+    ? `Multiple claims were checked separately. ${data.claims.map((c) => `${c.claim} ${c.verdict}: ${c.summary}`).join(' ')}`
+    : 'No independently verifiable factual claim was identified.');
+  const sources = [...new Map(data.claims.flatMap((c) => c.sources).map((s) => [s.url, s])).values()];
+  const verdict = single?.verdict === 'mixed' ? 'disputed' : single?.verdict ?? 'unverifiable';
+  json(res, 200, { ...data, verdict, summary, sources });
 }
 
 /** Fetches an article by URL for the landing page demo (the browser splits it into sentences). */
@@ -272,6 +306,6 @@ function readBody(req: IncomingMessage): Promise<string> {
 }
 
 function json(res: ServerResponse, status: number, body: unknown) {
-  res.writeHead(status, { 'Content-Type': 'application/json' });
+  if (!res.headersSent) res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(body));
 }

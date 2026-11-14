@@ -511,6 +511,11 @@ h1 {
 .factcheck {
   margin-top: 12px;
 }
+.factcheck .claim-results {
+  max-height: 45vh;
+  overflow-y: auto;
+  padding-right: 6px;
+}
 .check-button {
   all: unset;
   box-sizing: border-box;

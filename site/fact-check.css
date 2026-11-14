@@ -1,0 +1,67 @@
+.claim-results {
+  box-sizing: border-box;
+  display: grid;
+  gap: 16px;
+  width: 100%;
+  min-width: 0;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.claim-results .claim-result + .claim-result {
+  padding-top: 14px;
+  border-top: 1px solid var(--v-line, var(--line, #ddd));
+}
+.claim-results .claim-text {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.claim-results .claim-summary {
+  margin: 8px 0;
+  font-size: 13px;
+  color: var(--v-muted, var(--muted));
+}
+.claim-results .claim-heading {
+  margin: 8px 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.claim-results .claim-note,
+.claim-results .reviewed-claim {
+  margin: 4px 0;
+  font-size: 12px;
+  color: var(--v-muted, var(--muted));
+}
+.claim-results .claim-sources {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+  font-size: 13px;
+}
+.claim-results a {
+  color: var(--v-accent-text, var(--accent-text));
+  text-decoration: underline;
+}
+.claim-results .source-excerpt {
+  margin: 4px 0 0;
+  padding-left: 8px;
+  border-left: 2px solid var(--v-line, var(--line, #ddd));
+  color: var(--v-muted, var(--muted));
+  font-size: 12px;
+}
+.claim-results .claim-reviews {
+  margin-top: 10px;
+  font-size: 13px;
+}
+.claim-results .claim-reviews > summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.claim-results .claim-review {
+  padding: 8px 0;
+}
+.claim-results .claim-review + .claim-review {
+  border-top: 1px solid var(--v-line, var(--line, #ddd));
+}

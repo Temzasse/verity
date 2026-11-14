@@ -1,10 +1,11 @@
 // "Try it" demo: analyze an article by link or pasted text with the same server API the extension uses
 // (/api/extract → split into sentences here → /api/analyze), then show the findings inline.
 // Also renders the live stats card (/api/stats). No dependencies; all text goes in via textContent.
+import { renderFactCheckResults } from './fact-check-view.js';
 
 const CATEGORIES = {
   propaganda: { label: 'Propaganda', color: '#dc2626' },
-  misinformation: { label: 'Misinformation', color: '#ea580c' },
+  misinformation: { label: 'Claim to check', color: '#ea580c' },
   'unsupported-claim': { label: 'Unsupported claim', color: '#ca8a04' },
   'loaded-language': { label: 'Loaded language', color: '#db2777' },
   'logical-fallacy': { label: 'Logical fallacy', color: '#7c3aed' },
@@ -13,7 +14,8 @@ const CATEGORIES = {
 const VERDICTS = {
   supported: { label: 'Supported by sources', color: '#16a34a' },
   contradicted: { label: 'Contradicted by sources', color: '#dc2626' },
-  disputed: { label: 'Disputed or misleading', color: '#d97706' },
+  disputed: { label: 'Needs context', color: '#d97706' },
+  mixed: { label: 'Mixed evidence', color: '#d97706' },
   unverifiable: { label: "Couldn't verify", color: '#64748b' },
 };
 const CHECKABLE = new Set(['unsupported-claim', 'misinformation', 'missing-context']);
@@ -186,7 +188,7 @@ async function api(path, body) {
     throw new Error("Couldn't reach the analysis server. Check your connection and try again.");
   }
   const data = await res.json().catch(() => null);
-  if (!res.ok || !data) throw new Error(data?.error ?? `The analysis server returned an error (${res.status}).`);
+  if (!res.ok || !data || data.error) throw new Error(data?.error ?? `The analysis server returned an error (${res.status}).`);
   return data;
 }
 
@@ -399,6 +401,7 @@ function factCheckSection(card, finding, index, state) {
           .map((s) => s.text)
           .join(' ');
         const data = await api('/fact-check', {
+          version: 2,
           url: state.article.url,
           title: state.article.title || 'Untitled',
           publishedTime: state.article.publishedTime ?? null,
@@ -413,31 +416,9 @@ function factCheckSection(card, finding, index, state) {
     });
     section.append(b);
   } else if (check.status === 'loading') {
-    section.append(el('p', 'try-checking', 'Searching the web for sources…'));
+    section.append(el('p', 'try-checking', 'Checking claims and published sources…'));
   } else {
-    const { verdict, summary, sources } = check.data;
-    const v = VERDICTS[verdict] ?? VERDICTS.unverifiable;
-    const badge = el('span', 'chip', v.label);
-    badge.style.setProperty('--cat', v.color);
-    section.append(badge);
-    if (summary) section.append(el('p', 'try-rationale', summary));
-    const links = el('ul', 'try-sources');
-    for (const s of sources ?? []) {
-      let host;
-      try {
-        const u = new URL(s.url);
-        if (u.protocol !== 'https:' && u.protocol !== 'http:') continue;
-        host = u.hostname.replace(/^www\./, '');
-      } catch {
-        continue;
-      }
-      const a = el('a', null, s.title || host);
-      a.href = s.url;
-      a.target = '_blank';
-      a.rel = 'noopener noreferrer';
-      links.append(el('li', null, [a, el('span', 'try-host', host)]));
-    }
-    if (links.children.length) section.append(links);
+    section.append(renderFactCheckResults(check.data, VERDICTS));
   }
   return section;
 }

@@ -1,4 +1,5 @@
 import './style.css';
+import '../../site/fact-check.css';
 import type { ContentScriptContext } from 'wxt/utils/content-script-context';
 import { CAPTURE_MESSAGE, type VerityMessage } from '@/utils/messages';
 import { startScan, type Outcome } from './scan';
@@ -10,6 +11,7 @@ import { confidenceGauge } from './gauge';
 import type { PageContent } from './extract';
 import { applyHighlights, clearHighlights, setActiveHighlight, type PlacedFinding } from './highlight';
 import { clearResult } from './clear-result';
+import { renderFactCheckResults } from '../../site/fact-check-view.js';
 
 /** Categories whose findings get a "Check this claim" button (factual claims, not rhetoric). */
 const CHECKABLE = new Set<Category>(['unsupported-claim', 'misinformation', 'missing-context']);
@@ -306,32 +308,9 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
       if (state) section.append(el('p', 'error', state.error));
       section.append(button);
     } else if (state.status === 'loading') {
-      section.append(el('p', 'muted checking', 'Searching the web for sources…'));
+      section.append(el('p', 'muted checking', 'Checking claims and published sources…'));
     } else {
-      const { verdict, summary, sources, cached } = state.data;
-      const badge = el('span', 'chip', VERDICTS[verdict].label);
-      badge.style.setProperty('--cat', VERDICTS[verdict].color);
-      section.append(el('div', 'verdict', [badge, ...(cached ? [el('span', 'confidence', 'cached')] : [])]));
-      if (summary) section.append(el('p', 'summary', summary));
-      if (sources.length) {
-        const list = el('ul', 'sources');
-        for (const s of sources) {
-          let host = '';
-          try {
-            const u = new URL(s.url);
-            if (u.protocol !== 'https:' && u.protocol !== 'http:') continue;
-            host = u.hostname.replace(/^www\./, '');
-          } catch {
-            continue;
-          }
-          const link = el('a', null, s.title || host);
-          link.href = s.url;
-          link.target = '_blank';
-          link.rel = 'noopener noreferrer';
-          list.append(el('li', null, [link, el('span', 'host', host)]));
-        }
-        section.append(el('p', 'label', 'Sources'), list);
-      }
+      section.append(renderFactCheckResults(state.data, VERDICTS));
     }
     return section;
   }
@@ -397,6 +376,7 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
     refreshFinding(finding);
     try {
       const data = await factCheck({
+        version: 2,
         url: article.url,
         title: article.title,
         publishedTime: article.publishedTime,
@@ -559,8 +539,11 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
     const head = body.querySelector(`.finding[data-key="${CSS.escape(key)}"] .finding-head`);
     head?.querySelector('.verdict-dot')?.remove();
     if (head && state?.status === 'done') {
-      const dot = el('span', 'verdict-dot', VERDICTS[state.data.verdict].label);
-      dot.style.setProperty('--cat', VERDICTS[state.data.verdict].color);
+      const results = state.data.claims;
+      if (!results.length) return;
+      const single = results.length === 1 ? VERDICTS[results[0]!.verdict] : null;
+      const dot = el('span', 'verdict-dot', single?.label ?? `${results.length} claims checked`);
+      dot.style.setProperty('--cat', single?.color ?? '#64748b');
       head.append(dot);
     }
   }

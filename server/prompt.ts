@@ -22,7 +22,7 @@ ${techniqueList}
 
 Choosing a technique:
 - Pick the single most specific technique. Name calling is a label for a person or group; loaded language is charged wording about events, actions or things.
-- false-claim ONLY for claims that contradict well-established, widely documented facts or scientific consensus. If you are not certain, use unsourced-claim instead.
+- false-claim is the stable id for "Claim to check": identify specific factual assertions worth verifying. This scan has no external evidence and cannot establish falsity. Never call a claim false or misinformation in your rationale; explain what needs checking. Use unsourced-claim specifically for missing attribution.
 - If a passage fits no listed technique, do not flag it.
 
 Rules:
