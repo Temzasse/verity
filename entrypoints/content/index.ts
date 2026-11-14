@@ -156,7 +156,9 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
     focus.classList.remove('reveal');
     void focus.offsetWidth; // restart the fade-in animation
     focus.classList.add('reveal');
-    positionFocus();
+    // The tooltip appears together with the spotlight, once the page has stopped scrolling.
+    tooltip.hidden = false;
+    positionTooltip();
   }
 
   /** Hides the spotlight and shows it again once the scroll to the finding has settled. */
@@ -310,24 +312,27 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
         renderFeedback(finding),
       ]));
     tooltip.style.setProperty('--cat', meta.color);
-    tooltip.hidden = false;
+    // A different finding than the one spotlit stays hidden until the scroll to it has settled (shown in
+    // revealFocus), so it doesn't slide around during the smooth scroll. Same finding (e.g. a re-render
+    // after a fact-check or a vote) keeps its tooltip and spotlight as they are.
+    const key = findingKey(finding);
+    const isNew = key !== focusKey;
+    tooltip.hidden = isNew;
     let willScroll = false;
     if (scroll) {
-      // Center the passage in the viewport; the tooltip tracks it during the smooth scroll.
+      // Center the passage in the viewport.
       const rect = finding.range.getBoundingClientRect();
       const delta = rect.top - window.innerHeight * 0.4;
       const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
       willScroll = Math.abs(delta) > 2 && !(delta > 0 && scrollY >= maxScroll - 1) && !(delta < 0 && scrollY <= 0);
       if (willScroll) window.scrollBy({ top: delta, behavior: 'smooth' });
     }
-    // A different finding than the one spotlit: re-spotlight after scrolling. Same finding
-    // (e.g. a re-render after a fact-check) keeps the current spotlight as is.
-    const key = findingKey(finding);
-    if (key !== focusKey) {
+    if (isNew) {
       focusKey = key;
       scheduleFocus(willScroll);
+    } else {
+      positionTooltip();
     }
-    positionTooltip();
   }
 
   /** Fact-check section of the tooltip: button → loading → verdict with sources (or error + retry). */
@@ -343,7 +348,7 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
       if (state) section.append(el('p', 'error', state.error));
       section.append(button);
     } else if (state.status === 'loading') {
-      section.append(el('p', 'muted checking', 'Checking claims and published sources…'));
+      section.append(el('p', 'muted checking', 'Checking sources…'));
     } else {
       section.append(renderFactCheckResults(state.data, VERDICTS));
     }

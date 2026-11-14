@@ -7,7 +7,7 @@ Verity helps readers examine manipulative rhetoric and factual claims in article
 **Claim**:
 A single factual assertion that can be assessed independently against evidence; one sentence may contain several claims. Identifying a claim as worth checking does not establish that it is false.
 
-**Claim to check**:
+**Check the facts**:
 A claim identified for factual verification whose truth has not yet been established through relevant external evidence. This initial label makes no judgment that the claim is false.
 _Avoid_: Misinformation, false claim before verification
 

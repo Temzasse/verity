@@ -68,13 +68,13 @@ function ensureStyle(): HTMLStyleElement {
 function css(active: Category | null) {
   const rules = Object.entries(CATEGORIES).flatMap(([id, { color }]) => [
     `::highlight(${name(id as Category)}) {
-      background-color: color-mix(in srgb, ${color} 22%, transparent);
-      text-decoration: underline 2px ${color};
+      background-color: color-mix(in srgb, ${color} 14%, transparent);
+      text-decoration: underline 2px color-mix(in srgb, ${color} 75%, transparent);
       text-underline-offset: 3px;
     }`,
     `::highlight(${quickName(id as Category)}) {
-      background-color: color-mix(in srgb, ${color} 10%, transparent);
-      text-decoration: underline dotted 2px ${color};
+      background-color: color-mix(in srgb, ${color} 8%, transparent);
+      text-decoration: underline dotted 2px color-mix(in srgb, ${color} 75%, transparent);
       text-underline-offset: 3px;
     }`,
   ]);
@@ -82,7 +82,10 @@ function css(active: Category | null) {
   rules.push(`html[data-verity-hover], html[data-verity-hover] * { cursor: pointer !important; }`);
   if (active) {
     const { color } = CATEGORIES[active];
-    rules.push(`::highlight(${ACTIVE}) { background-color: color-mix(in srgb, ${color} 50%, transparent); color: inherit; }`);
+    // Light pastel tint (mixed with white, not see-through) so black text on it stays easy to read.
+    rules.push(
+      `::highlight(${ACTIVE}) { background-color: color-mix(in srgb, ${color} 26%, white); color: inherit; text-decoration: underline 2px ${color}; text-underline-offset: 3px; }`,
+    );
   }
   return rules.join('\n');
 }

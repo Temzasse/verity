@@ -363,7 +363,48 @@ code {
   margin-top: 40px;
 }
 .step {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   padding: 26px 24px 28px;
+}
+/* Grid lines in the top of the card, fading out downwards. */
+.step::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-image:
+    linear-gradient(rgb(0 0 0 / 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(0 0 0 / 0.05) 1px, transparent 1px);
+  background-size: 22px 22px;
+  background-position: -1px -1px;
+  -webkit-mask-image: linear-gradient(to bottom, #000, transparent 62%);
+  mask-image: linear-gradient(to bottom, #000, transparent 62%);
+  pointer-events: none;
+}
+.step-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 22px;
+}
+.step-icon {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--accent);
+  box-shadow: 0 0 0 1px rgb(79 124 240 / 0.18), 0 6px 16px -6px rgb(79 124 240 / 0.45);
+}
+.step-label {
+  color: var(--faint);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 .step p,
 .honest p,
@@ -389,11 +430,62 @@ code {
 }
 
 /* What it detects */
-.techniques {
+.technique {
+  display: flex;
+  flex-direction: column;
+}
+.technique-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 17px;
+  letter-spacing: -0.01em;
+}
+.technique-title::before {
+  content: '';
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--cat);
+}
+.tech-list {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.tech-list:empty {
+  display: none;
+}
+.tech-list li {
+  display: grid;
+  gap: 2px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+.tech-list li:last-child {
+  padding-bottom: 0;
+}
+.tech-name {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+}
+.tech-def {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+/* Cards flow into balanced columns (they differ a lot in height), ordered so the columns even out. */
+.techniques {
+  columns: 3;
+  column-gap: 16px;
   margin-top: 40px;
+}
+.techniques > .technique {
+  break-inside: avoid;
+  margin-bottom: 16px;
 }
 .technique {
   padding: 22px 24px 24px;
@@ -886,7 +978,7 @@ button.button:disabled {
   align-items: center;
   gap: 6px;
   margin-top: 12px;
-  padding-top: 10px;
+  padding-top: 12px;
   border-top: 1px solid var(--line);
 }
 .try-feedback-label {
@@ -975,9 +1067,11 @@ button.button:disabled {
     gap: 40px;
   }
   .steps,
-  .techniques,
   .try-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+  .techniques {
+    columns: 1;
   }
   .stat-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));

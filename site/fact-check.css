@@ -77,7 +77,13 @@
   color: var(--v-muted, var(--muted));
   font-size: 12px;
   font-weight: 500;
+  line-height: 1.4;
   padding: 4px 0;
+}
+/* Tooltip sections (fact-check, "About this flag", the relevance question) share one rhythm:
+   12px above each divider and 12px below it. */
+.finding-details > summary {
+  padding: 0;
 }
 .claim-results .claim-details > summary:focus-visible,
 .finding-details > summary:focus-visible {
@@ -86,12 +92,12 @@
   border-radius: 4px;
 }
 .finding-details {
-  margin-top: 10px;
-  padding-top: 6px;
+  margin-top: 12px;
+  padding-top: 12px;
   border-top: 1px solid var(--v-line, var(--line, #ddd));
 }
 .finding-details[open] > summary {
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 .claim-results .claim-review {
   padding: 8px 0;

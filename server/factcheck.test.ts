@@ -230,7 +230,7 @@ test('publication dates are part of the fact-check cache identity', async () => 
 test('the initial technique label stays neutral before any factual verification', async () => {
   const res = await fetch(`${baseUrl}/techniques`);
   const techniques = await res.json();
-  assert.equal(techniques['false-claim'].label, 'Claim to check');
+  assert.equal(techniques['false-claim'].label, 'Check the facts');
 });
 
 test('installed clients without a response version still receive their single-claim result contract', async () => {

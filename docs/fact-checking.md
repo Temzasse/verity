@@ -5,7 +5,7 @@ Design agreed with the user on 2026-11-14 and implemented behind the existing **
 ## Reader flow
 
 1. The article scan identifies rhetoric and claims worth checking.
-2. Before factual verification, use **Claim to check** in place of **Misinformation / False claim**. Preserve the other categories and techniques.
+2. Before factual verification, use **Check the facts** in place of **Misinformation / False claim**. Preserve the other categories and techniques.
 3. Factual checking runs only when the reader clicks the existing **Check with web sources** button, rather than automatically during the scan.
 4. The check retrieves relevant published claim reviews through Google's Fact Check Tools API, reads the applicable review articles, and researches web sources.
 5. Return an assessment based on relevant external evidence, with source links. Model agreement or confidence alone cannot establish a factual verdict.

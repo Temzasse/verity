@@ -11,7 +11,7 @@ export const CATEGORIES = {
     color: '#dc2626',
   },
   misinformation: {
-    label: 'Claim to check',
+    label: 'Check the facts',
     description: 'A factual assertion worth checking against external evidence; no judgment of falsity.',
     color: '#ea580c',
   },
@@ -144,7 +144,7 @@ export const TECHNIQUES = {
   // Misinformation
   'false-claim': {
     // Retain the stored id for compatibility; the initial scan does not establish falsity.
-    label: 'Claim to check',
+    label: 'Check the facts',
     category: 'misinformation',
     definition: 'A factual claim worth checking.',
   },

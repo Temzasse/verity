@@ -5,7 +5,7 @@ import { renderFactCheckResults } from './fact-check-view.js';
 
 const CATEGORIES = {
   propaganda: { label: 'Propaganda', color: '#dc2626' },
-  misinformation: { label: 'Claim to check', color: '#ea580c' },
+  misinformation: { label: 'Check the facts', color: '#ea580c' },
   'unsupported-claim': { label: 'Unsupported claim', color: '#ca8a04' },
   'loaded-language': { label: 'Loaded language', color: '#db2777' },
   'logical-fallacy': { label: 'Logical fallacy', color: '#7c3aed' },
@@ -56,8 +56,30 @@ The council said it would review the scheme after twelve months.`,
 let techniques = {};
 fetch('/api/techniques')
   .then((r) => (r.ok ? r.json() : {}))
-  .then((t) => (techniques = t))
+  .then((t) => {
+    techniques = t;
+    renderTechniqueChips(t);
+  })
   .catch(() => {});
+
+/**
+ * "What it detects": each category card lists its techniques from the server's fixed list (the same one
+ * the analysis uses), name and one-line definition, so the page always matches what Verity can flag.
+ * Single-technique categories rely on the card's own description. Without the API the cards keep their
+ * short descriptions.
+ */
+function renderTechniqueChips(list) {
+  for (const card of document.querySelectorAll('.technique[data-category]')) {
+    const ul = card.querySelector('.tech-list');
+    if (!ul) continue;
+    const entries = Object.values(list).filter((t) => t.category === card.dataset.category);
+    ul.replaceChildren(
+      ...(entries.length > 1
+        ? entries.map((t) => el('li', null, [el('span', 'tech-name', t.label), el('span', 'tech-def', t.definition)]))
+        : []),
+    );
+  }
+}
 
 const form = document.querySelector('#try-form');
 if (form) initTry();
@@ -482,7 +504,7 @@ function factCheckSection(card, finding, index, state) {
     });
     section.append(b);
   } else if (check.status === 'loading') {
-    section.append(el('p', 'try-checking', 'Checking claims and published sources…'));
+    section.append(el('p', 'try-checking', 'Checking sources…'));
   } else {
     section.append(renderFactCheckResults(check.data, VERDICTS));
   }

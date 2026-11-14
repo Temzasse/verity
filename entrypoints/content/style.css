@@ -738,7 +738,7 @@ h1 {
   align-items: center;
   gap: 6px;
   margin-top: 12px;
-  padding-top: 10px;
+  padding-top: 12px;
   border-top: 1px solid var(--v-border);
 }
 .feedback-label {
