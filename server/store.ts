@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { AnalysisRequest, Finding } from '../utils/analysis.ts';
+import type { AnalysisRequest, FactCheckRequest } from '../utils/analysis.ts';
 
 /** File-based result cache + daily spend tracking, so dev restarts don't re-spend credits. */
 
@@ -15,17 +15,24 @@ export function cacheKey(model: string, promptVersion: string, req: AnalysisRequ
   return h.digest('hex').slice(0, 32);
 }
 
-export async function getCached(key: string): Promise<Finding[] | null> {
+export function factCheckKey(model: string, promptVersion: string, req: FactCheckRequest): string {
+  return createHash('sha256')
+    .update(`fact-check\n${model}\n${promptVersion}\n${req.url}\n${req.claim}\n${req.context}`)
+    .digest('hex')
+    .slice(0, 32);
+}
+
+export async function getCached<T>(key: string): Promise<T | null> {
   try {
-    return JSON.parse(await readFile(join(DIR, `${key}.json`), 'utf8')) as Finding[];
+    return JSON.parse(await readFile(join(DIR, `${key}.json`), 'utf8')) as T;
   } catch {
     return null;
   }
 }
 
-export async function putCached(key: string, findings: Finding[]) {
+export async function putCached(key: string, value: unknown) {
   await mkdir(DIR, { recursive: true });
-  await writeFile(join(DIR, `${key}.json`), JSON.stringify(findings, null, 2));
+  await writeFile(join(DIR, `${key}.json`), JSON.stringify(value, null, 2));
 }
 
 const today = () => new Date().toISOString().slice(0, 10);

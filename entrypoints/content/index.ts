@@ -3,8 +3,18 @@ import type { ContentScriptContext } from 'wxt/utils/content-script-context';
 import { CAPTURE_MESSAGE, type VerityMessage } from '@/utils/messages';
 import { scanPage, type ScanResult } from './scan';
 import { playScanEffect } from './dither';
-import { CATEGORIES } from './analyze';
+import type { Category, FactCheckResponse } from '@/utils/analysis';
+import { CATEGORIES, VERDICTS, factCheck } from './analyze';
+import type { PageContent } from './extract';
 import { applyHighlights, clearHighlights, setActiveHighlight, type PlacedFinding } from './highlight';
+
+/** Categories whose findings get a "Check this claim" button (factual claims, not rhetoric). */
+const CHECKABLE = new Set<Category>(['unsupported-claim', 'misinformation', 'missing-context']);
+
+type FactCheckState =
+  | { status: 'loading' }
+  | { status: 'done'; data: FactCheckResponse }
+  | { status: 'error'; error: string };
 
 /** One scan-line pass; passes repeat until the analysis returns. */
 const SCAN_EFFECT_MS = 2600;
@@ -56,6 +66,8 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
   let tooltip!: HTMLElement;
   let active: PlacedFinding | null = null;
   let placed: PlacedFinding[] = [];
+  let article: PageContent | null = null;
+  const factChecks = new Map<string, FactCheckState>();
 
   const ui = await createShadowRootUi(ctx, {
     name: 'verity-overlay',
@@ -136,6 +148,7 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
       ]),
       ...(finding.technique ? [el('p', 'technique', finding.technique)] : []),
       el('p', 'rationale', finding.rationale),
+      ...(CHECKABLE.has(finding.category) ? [renderFactCheck(finding)] : []),
     );
     tooltip.style.setProperty('--cat', meta.color);
     tooltip.hidden = false;
@@ -145,6 +158,88 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
       window.scrollBy({ top: rect.top - window.innerHeight * 0.4, behavior: 'smooth' });
     }
     positionTooltip();
+  }
+
+  /** Fact-check section of the tooltip: button → loading → verdict with sources (or error + retry). */
+  function renderFactCheck(finding: PlacedFinding): HTMLElement {
+    const key = findingKey(finding);
+    const state = factChecks.get(key);
+    const section = el('div', 'factcheck');
+
+    if (!state || state.status === 'error') {
+      const button = el('button', 'check-button', state ? 'Retry fact-check' : 'Check this claim with web sources');
+      button.type = 'button';
+      button.addEventListener('click', () => void runFactCheck(finding));
+      if (state) section.append(el('p', 'error', state.error));
+      section.append(button);
+    } else if (state.status === 'loading') {
+      section.append(el('p', 'muted checking', 'Searching the web for sources…'));
+    } else {
+      const { verdict, summary, sources, cached } = state.data;
+      const badge = el('span', 'chip', VERDICTS[verdict].label);
+      badge.style.setProperty('--cat', VERDICTS[verdict].color);
+      section.append(el('div', 'verdict', [badge, ...(cached ? [el('span', 'confidence', 'cached')] : [])]));
+      if (summary) section.append(el('p', 'summary', summary));
+      if (sources.length) {
+        const list = el('ul', 'sources');
+        for (const s of sources) {
+          let host = '';
+          try {
+            const u = new URL(s.url);
+            if (u.protocol !== 'https:' && u.protocol !== 'http:') continue;
+            host = u.hostname.replace(/^www\./, '');
+          } catch {
+            continue;
+          }
+          const link = el('a', null, s.title || host);
+          link.href = s.url;
+          link.target = '_blank';
+          link.rel = 'noopener noreferrer';
+          list.append(el('li', null, [link, el('span', 'host', host)]));
+        }
+        section.append(el('p', 'label', 'Sources'), list);
+      }
+    }
+    return section;
+  }
+
+  async function runFactCheck(finding: PlacedFinding) {
+    const key = findingKey(finding);
+    if (!article || factChecks.get(key)?.status === 'loading') return;
+    const sentences = article.sentences;
+    const context = sentences
+      .filter((s) => Math.abs(s.id - finding.sentenceId) <= 2)
+      .map((s) => s.text)
+      .join(' ');
+    factChecks.set(key, { status: 'loading' });
+    refreshFinding(finding);
+    try {
+      const data = await factCheck({
+        url: article.url,
+        title: article.title,
+        publishedTime: article.publishedTime,
+        claim: finding.sentence.text,
+        context,
+      });
+      factChecks.set(key, { status: 'done', data });
+    } catch (err) {
+      factChecks.set(key, { status: 'error', error: err instanceof Error ? err.message : String(err) });
+    }
+    refreshFinding(finding);
+  }
+
+  /** Re-renders the tooltip (if this finding is open) and its panel item after a fact-check update. */
+  function refreshFinding(finding: PlacedFinding) {
+    const key = findingKey(finding);
+    const state = factChecks.get(key);
+    const item = body.querySelector(`.finding[data-key="${CSS.escape(key)}"] .finding-head`);
+    item?.querySelector('.verdict-dot')?.remove();
+    if (item && state?.status === 'done') {
+      const dot = el('span', 'verdict-dot', VERDICTS[state.data.verdict].label);
+      dot.style.setProperty('--cat', VERDICTS[state.data.verdict].color);
+      item.append(dot);
+    }
+    if (active && findingKey(active) === key) showFinding(active, { scroll: false });
   }
 
   /** The finding whose highlighted text is under the given viewport point, if any. */
@@ -201,6 +296,7 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
       return;
     }
     const { content, analysis } = result;
+    article = content;
     placed = applyHighlights(analysis.findings, content.sentences);
     const list = el('ol', 'findings');
     for (const f of placed) {
@@ -256,6 +352,8 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
       showFinding(null);
       clearHighlights();
       placed = [];
+      article = null;
+      factChecks.clear();
       raise();
       body.innerHTML = `<p class="muted">Scanning page…</p>`;
 

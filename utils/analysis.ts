@@ -75,3 +75,36 @@ export type AnalysisResponse = {
   /** Estimated USD cost of this request (0 when cached). */
   costUsd: number;
 };
+
+/** Sent to POST /fact-check for one claim. */
+export type FactCheckRequest = {
+  url: string;
+  title: string;
+  publishedTime: string | null;
+  /** The sentence (or quoted words) to verify. */
+  claim: string;
+  /** Surrounding sentences, so the claim can be understood. */
+  context: string;
+};
+
+export const VERDICTS = {
+  supported: { label: 'Supported by sources', color: '#16a34a' },
+  contradicted: { label: 'Contradicted by sources', color: '#dc2626' },
+  disputed: { label: 'Disputed or misleading', color: '#d97706' },
+  unverifiable: { label: "Couldn't verify", color: '#64748b' },
+} as const;
+
+export type Verdict = keyof typeof VERDICTS;
+
+export type FactCheckSource = { url: string; title: string; citedText?: string };
+
+/** Returned by POST /fact-check. */
+export type FactCheckResponse = {
+  verdict: Verdict;
+  summary: string;
+  sources: FactCheckSource[];
+  model: string;
+  cached: boolean;
+  costUsd: number;
+  searches: number;
+};

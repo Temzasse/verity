@@ -1,5 +1,4 @@
-import { SCAN_MESSAGE, type AnalyzeReply, type AnalyzeRequest, type CaptureRequest } from '@/utils/messages';
-import type { AnalysisResponse } from '@/utils/analysis';
+import { SCAN_MESSAGE, type CaptureRequest, type ServerReply, type ServerRequest } from '@/utils/messages';
 
 /** Analysis server (server/). Override with WXT_API_URL in .env when it's deployed elsewhere. */
 const API_URL: string = import.meta.env.WXT_API_URL || 'http://localhost:8787';
@@ -30,39 +29,39 @@ export default defineBackground(() => {
     return true;
   });
 
-  // Page analysis goes through the background: extension pages aren't subject to the page's CSP
-  // or CORS, and the server URL/token stay out of the page.
-  browser.runtime.onMessage.addListener((message: AnalyzeRequest, _sender, sendResponse) => {
-    if (message?.type !== 'verity:analyze') return false;
-    console.log('[Verity] analyze request:', message.request.sentences.length, 'sentences', message.request.url);
-    analyzeOnServer(message)
-      .catch((err): AnalyzeReply => ({ ok: false, error: `Background error: ${err instanceof Error ? err.message : String(err)}` }))
+  // Server calls (analysis, fact-checks) go through the background: extension pages aren't subject
+  // to the page's CSP or CORS, and the server URL/token stay out of the page.
+  browser.runtime.onMessage.addListener((message: ServerRequest, _sender, sendResponse) => {
+    if (message?.type !== 'verity:server') return false;
+    console.log('[Verity] server request:', message.path);
+    callServer(message)
+      .catch((err): ServerReply => ({ ok: false, error: `Background error: ${err instanceof Error ? err.message : String(err)}` }))
       .then((reply) => {
-        console.log('[Verity] analyze reply:', reply.ok ? `${reply.data.findings.length} findings` : reply.error);
+        console.log('[Verity] server reply:', message.path, reply.ok ? 'ok' : reply.error);
         sendResponse(reply);
       });
     return true;
   });
 });
 
-async function analyzeOnServer({ request }: AnalyzeRequest): Promise<AnalyzeReply> {
+async function callServer({ path, body }: ServerRequest): Promise<ServerReply> {
   let res: Response;
   try {
-    res = await fetch(`${API_URL}/analyze`, {
+    res = await fetch(`${API_URL}${path}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         ...(import.meta.env.WXT_API_TOKEN ? { 'X-Verity-Token': import.meta.env.WXT_API_TOKEN } : {}),
       },
-      body: JSON.stringify(request),
+      body: JSON.stringify(body),
     });
   } catch (err) {
     console.warn('[Verity] fetch failed', err);
     return { ok: false, error: `Can't reach the analysis server at ${API_URL}. Start it with \`pnpm server\`.` };
   }
-  const body = (await res.json().catch(() => null)) as (AnalysisResponse & { error?: string }) | null;
-  if (!res.ok || !body) return { ok: false, error: body?.error ?? `Analysis server error ${res.status}` };
-  return { ok: true, data: body };
+  const data = (await res.json().catch(() => null)) as { error?: string } | null;
+  if (!res.ok || !data) return { ok: false, error: data?.error ?? `Analysis server error ${res.status}` };
+  return { ok: true, data } as ServerReply;
 }
 
 async function sendScan(tabId: number) {

@@ -263,3 +263,89 @@ h1 {
   font-size: 13px;
   overflow-wrap: anywhere;
 }
+
+/* Fact-check section inside the tooltip */
+.factcheck {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--v-border);
+}
+.check-button {
+  all: unset;
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: var(--v-accent);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  cursor: pointer;
+}
+.check-button:hover {
+  filter: brightness(1.1);
+}
+.check-button:focus-visible {
+  outline: 2px solid var(--v-fg);
+  outline-offset: 2px;
+}
+.checking {
+  margin: 0;
+  animation: v-pulse 1.2s ease-in-out infinite;
+}
+.verdict {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.summary {
+  margin: 0 0 8px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.factcheck .label {
+  margin: 0 0 4px !important;
+}
+.sources {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+.sources li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  min-width: 0;
+}
+.sources a {
+  color: var(--v-accent);
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sources a:hover {
+  text-decoration: underline;
+}
+.sources .host {
+  flex: none;
+  color: var(--v-muted);
+  font-size: 11px;
+}
+.verdict-dot {
+  margin-left: auto;
+  margin-right: 6px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--cat);
+  white-space: nowrap;
+}
+@keyframes v-pulse {
+  50% { opacity: 0.45; }
+}

@@ -8,7 +8,7 @@ import { SYSTEM_PROMPT, buildUserMessage } from './prompt.ts';
 export const MODEL = 'claude-haiku-5-5';
 
 // Claude Haiku 5.5 rates (USD per token) for prompts up to 100K tokens.
-const PRICE = { input: 0.1e-6, output: 0.5e-6, cacheRead: 0.01e-6, cacheWrite: 0.125e-6 };
+export const PRICE = { input: 0.1e-6, output: 0.5e-6, cacheRead: 0.01e-6, cacheWrite: 0.125e-6 };
 
 const FindingsSchema = z.object({
   findings: z.array(
@@ -26,7 +26,7 @@ const FindingsSchema = z.object({
 // Uses only ANTHROPIC_API_KEY from server/.env (loaded by `pnpm server`), never other credentials
 // that may exist on the machine, so the hackathon key is the one that gets billed.
 let client: Anthropic | undefined;
-function getClient(): Anthropic {
+export function getClient(): Anthropic {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new AnalysisError('ANTHROPIC_API_KEY is not set. Add it to server/.env and restart `pnpm server`.', 500);
   client ??= new Anthropic({ apiKey });
@@ -52,11 +52,7 @@ export async function analyzeWithClaude(req: AnalysisRequest): Promise<{ finding
       messages: [{ role: 'user', content: buildUserMessage(req) }],
     });
   } catch (err) {
-    if (err instanceof Anthropic.AuthenticationError) throw new AnalysisError('Invalid ANTHROPIC_API_KEY (check server/.env)', 500);
-    if (err instanceof Anthropic.RateLimitError) throw new AnalysisError('Claude API rate limit hit, retry in a moment', 429);
-    if (err instanceof Anthropic.BadRequestError) throw new AnalysisError(`Claude API rejected the request: ${err.message}`, 502);
-    if (err instanceof Anthropic.APIError) throw new AnalysisError(`Claude API error ${err.status}: ${err.message}`, 502);
-    throw err;
+    throw toAnalysisError(err);
   }
 
   const u = response.usage;
@@ -75,6 +71,15 @@ export async function analyzeWithClaude(req: AnalysisRequest): Promise<{ finding
   if (!response.parsed_output) throw new AnalysisError('Claude returned output that did not match the schema', 502);
 
   return { findings: validateFindings(response.parsed_output.findings, req), costUsd };
+}
+
+/** Maps SDK errors to messages the extension can show. */
+export function toAnalysisError(err: unknown): unknown {
+  if (err instanceof Anthropic.AuthenticationError) return new AnalysisError('Invalid ANTHROPIC_API_KEY (check server/.env)', 500);
+  if (err instanceof Anthropic.RateLimitError) return new AnalysisError('Claude API rate limit hit, retry in a moment', 429);
+  if (err instanceof Anthropic.BadRequestError) return new AnalysisError(`Claude API rejected the request: ${err.message}`, 502);
+  if (err instanceof Anthropic.APIError) return new AnalysisError(`Claude API error ${err.status}: ${err.message}`, 502);
+  return err;
 }
 
 /** Drops findings that point at unknown sentences or quote words that aren't in the sentence. */
