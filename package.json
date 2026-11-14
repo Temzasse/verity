@@ -1,0 +1,19 @@
+{
+  "name": "verity",
+  "description": "Verity Chrome extension",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "wxt",
+    "build": "wxt build",
+    "zip": "wxt zip",
+    "compile": "tsc --noEmit",
+    "postinstall": "wxt prepare"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "web-ext": "^10.8.0",
+    "wxt": "0.21.5"
+  }
+}

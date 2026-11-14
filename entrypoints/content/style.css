@@ -1,0 +1,152 @@
+/* Injected into the overlay's shadow root (cssInjectionMode: 'ui'). */
+:host {
+  --v-bg: #ffffff;
+  --v-fg: #0f172a;
+  --v-muted: #64748b;
+  --v-border: #e2e8f0;
+  --v-accent: #2563eb;
+  --v-tile: #f1f5f9;
+}
+@media (prefers-color-scheme: dark) {
+  :host {
+    --v-bg: #0f172a;
+    --v-fg: #e2e8f0;
+    --v-muted: #94a3b8;
+    --v-border: #1e293b;
+    --v-accent: #60a5fa;
+    --v-tile: #1e293b;
+  }
+}
+
+.panel {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  width: 340px;
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  box-sizing: border-box;
+  background: var(--v-bg);
+  color: var(--v-fg);
+  border: 1px solid var(--v-border);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.18);
+  font: 14px/1.45 system-ui, -apple-system, sans-serif;
+  animation: v-in 160ms ease-out;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 12px 12px 16px;
+  border-bottom: 1px solid var(--v-border);
+}
+h1 {
+  flex: 1;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+.logo {
+  width: 18px;
+  height: 18px;
+  background: var(--v-accent);
+  mask: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2.4"><path d="M3 9V3h6M15 3h6v6M21 15v6h-6M9 21H3v-6M6 12h12"/></svg>') center / contain no-repeat;
+}
+.close {
+  all: unset;
+  cursor: pointer;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  text-align: center;
+  font-size: 20px;
+  line-height: 28px;
+  color: var(--v-muted);
+}
+.close:hover {
+  background: var(--v-tile);
+  color: var(--v-fg);
+}
+
+.body {
+  padding: 16px;
+}
+.body p {
+  margin: 0 0 12px;
+}
+.label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--v-muted);
+  margin-bottom: 2px !important;
+}
+.title {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.muted {
+  color: var(--v-muted);
+  font-size: 13px;
+}
+dl {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 0 0 12px;
+}
+dl div {
+  background: var(--v-tile);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+dt {
+  font-size: 11px;
+  color: var(--v-muted);
+}
+dd {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+/* Placeholder scan animation: a line sweeping down the viewport. */
+.sweep {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 3px;
+  background: var(--v-accent);
+  box-shadow: 0 0 24px 6px color-mix(in srgb, var(--v-accent) 60%, transparent);
+  pointer-events: none;
+  animation: v-sweep 900ms ease-in-out;
+}
+.sweep[hidden] {
+  display: none;
+}
+
+@keyframes v-sweep {
+  from { transform: translateY(0); }
+  to { transform: translateY(100vh); }
+}
+@keyframes v-in {
+  from { opacity: 0; transform: translateY(-6px); }
+}
+
+/* Placeholder "scanned" visual: translucent tint over the whole page. */
+.tint {
+  position: fixed;
+  inset: 0;
+  background: color-mix(in srgb, var(--v-accent) 10%, transparent);
+  pointer-events: none;
+  animation: v-fade 300ms ease-out;
+}
+.tint[hidden] {
+  display: none;
+}
+@keyframes v-fade {
+  from { opacity: 0; }
+}
