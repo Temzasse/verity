@@ -8,6 +8,7 @@ import { CATEGORIES, VERDICTS, factCheck, sendFeedback } from './analyze';
 import { confidenceGauge } from './gauge';
 import type { PageContent } from './extract';
 import { applyHighlights, clearHighlights, setActiveHighlight, type PlacedFinding } from './highlight';
+import { clearResult } from './clear-result';
 
 /** Categories whose findings get a "Check this claim" button (factual claims, not rhetoric). */
 const CHECKABLE = new Set<Category>(['unsupported-claim', 'misinformation', 'missing-context']);
@@ -71,6 +72,7 @@ type Panel = {
 
 async function createPanel(ctx: ContentScriptContext, onClose: () => void): Promise<Panel> {
   let layer!: HTMLElement;
+  let panel!: HTMLElement;
   let body!: HTMLElement;
   let sweep!: HTMLElement;
   let canvas!: HTMLCanvasElement;
@@ -103,6 +105,7 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
           </aside>
         </div>`;
       layer = container.querySelector('.layer')!;
+      panel = container.querySelector('.panel')!;
       body = container.querySelector('.body')!;
       sweep = container.querySelector('.sweep')!;
       tooltip = container.querySelector('.tooltip')!;
@@ -468,6 +471,17 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
     const smartPlaced = placed.filter((f) => f.source !== 'quick');
     const quickPlaced = placed.filter((f) => f.source === 'quick');
 
+    // Check the returned findings, not only successfully placed highlights: an unplaced
+    // finding or an unfinished/failed scan must never become a reassuring empty result.
+    const isClear = n > 0 && !!quick?.ok && !!smart?.ok && quickAll.length === 0 && smartFindings.length === 0;
+    panel.classList.toggle('clear', isClear);
+    if (smart?.ok && smart.data.cached) console.debug('[Verity] smart analysis served from cache');
+    if (isClear) {
+      showFinding(null);
+      body.replaceChildren(clearResult(content, () => ui.remove()));
+      return;
+    }
+
     const children: Node[] = [
       el('div', 'article-card', [
         el('p', 'label', content.isArticle ? 'Article' : 'Page'),
@@ -500,7 +514,6 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
       }
     }
     if (smart?.ok) {
-      if (smart.data.cached) console.debug('[Verity] smart analysis served from cache');
       children.push(el('p', 'muted note', 'Findings are produced by AI and can be wrong.'));
     }
     body.replaceChildren(...children);
@@ -577,6 +590,7 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
       article = null;
       factChecks.clear();
       votes.clear();
+      panel.classList.remove('clear');
       raise();
       body.replaceChildren(el('p', 'status', 'Scanning page…'));
 

@@ -166,6 +166,132 @@ h1 {
   color: var(--v-muted);
 }
 
+/* A completed scan with no findings leaves a small, expandable signal over the article. */
+.panel.clear {
+  width: min(270px, calc(100vw - 32px));
+  border-radius: 17px;
+  background-image: none;
+}
+.clear header {
+  gap: 8px;
+  padding: 13px 15px 12px;
+}
+.clear header::after {
+  display: none;
+}
+.clear header .logo {
+  width: 15px;
+  height: 15px;
+}
+.clear h1 {
+  font-size: 12px;
+}
+.clear .close {
+  width: 23px;
+  height: 23px;
+}
+.clear .body {
+  padding: 0 15px 14px;
+}
+.clear-summary {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px;
+  border: 1px solid var(--v-border);
+  border-radius: 11px;
+  background: var(--v-bg);
+  list-style: none;
+  cursor: pointer;
+}
+.clear-summary::-webkit-details-marker {
+  display: none;
+}
+.clear-summary:focus-visible,
+.keep-reading:focus-visible {
+  outline: 2px solid var(--v-accent);
+  outline-offset: 3px;
+}
+.clear-check {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  color: var(--v-accent-text);
+  background: var(--v-accent-soft);
+}
+.clear-check svg {
+  width: 22px;
+  height: 22px;
+}
+.clear-copy {
+  min-width: 0;
+}
+.clear-copy strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+}
+.clear-count {
+  display: block;
+  margin-top: 3px;
+  font-size: 10px;
+  color: var(--v-muted);
+}
+.clear-chevron {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-left: auto;
+  color: var(--v-muted);
+}
+.clear-result[open] .clear-chevron {
+  transform: rotate(180deg);
+}
+.clear-details {
+  padding: 17px 2px 0;
+}
+.clear-details .label {
+  font-size: 10px;
+}
+.clear-details .title {
+  margin-top: 5px;
+  font-size: 12px;
+  line-height: 1.5;
+  font-weight: 500;
+}
+.body .clear-scope {
+  border-top: 1px solid var(--v-border);
+  margin-top: 14px;
+  padding-top: 12px;
+  font-size: 10px;
+  color: var(--v-muted);
+}
+.body .clear-limitation {
+  margin-top: 12px;
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--v-muted);
+}
+.keep-reading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  border: 0;
+  border-radius: 5px;
+  padding: 9px 0 0;
+  background: transparent;
+  color: var(--v-accent-text);
+  font: 550 12px/1.4 var(--v-font);
+  cursor: pointer;
+}
+.keep-reading:hover {
+  text-decoration: underline;
+}
+
 /* "Scanning page…" / "Running smart analysis…": a white pill with a small spinner. */
 .status {
   display: flex;
