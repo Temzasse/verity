@@ -15,7 +15,8 @@
     "server": "node --env-file-if-exists=server/.env --watch server/index.ts",
     "site": "node scripts/site-dev.mjs",
     "release": "bash scripts/release.sh",
-    "deploy:vps": "bash scripts/deploy.sh"
+    "deploy:vps": "bash scripts/deploy.sh",
+    "reset:vps": "bash scripts/reset-cache.sh"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
