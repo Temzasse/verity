@@ -412,8 +412,9 @@ const VOTE_LABELS = { yes: 'Yes', no: 'No', unsure: 'Not sure' };
  * "Is this finding relevant?" with three equally weighted answers. Other readers' answers appear only
  * after this reader has answered, so they can't sway the vote. Answers can be changed.
  */
-// Answers are final on the live site; changing them is allowed when served locally (development).
-const CAN_CHANGE_VOTE = ['localhost', '127.0.0.1'].includes(location.hostname);
+const IS_LOCAL = ['localhost', '127.0.0.1'].includes(location.hostname);
+// Answers are final; for testing, a local page opened with ?change-vote shows a Change link.
+const CAN_CHANGE_VOTE = IS_LOCAL && new URLSearchParams(location.search).has('change-vote');
 
 function feedbackRow(card, finding, index, state) {
   // Buttons until the reader answers, then a bar of all readers' answers (never before answering).
@@ -540,7 +541,7 @@ function factCheckSection(card, finding, index, state) {
           },
           (event) => {
             // When running locally, log each streamed event with its timing.
-            if (CAN_CHANGE_VOTE) console.log(`[Verity] fact-check ${event.type} after ${((performance.now() - started) / 1000).toFixed(1)} s`, event);
+            if (IS_LOCAL) console.log(`[Verity] fact-check ${event.type} after ${((performance.now() - started) / 1000).toFixed(1)} s`, event);
             const current = state.checks.get(index);
             if (current?.status !== 'loading') return;
             if (event.type === 'claims') {

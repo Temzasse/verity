@@ -32,6 +32,8 @@ type VoteState =
   | { status: 'error'; error: string };
 
 const VOTE_LABELS: Record<Vote, string> = { yes: 'Yes', no: 'No', unsure: 'Not sure' };
+/** Answers are final; development builds started with WXT_ALLOW_VOTE_CHANGE=1 show a Change link for testing. */
+const CAN_CHANGE_VOTE = import.meta.env.DEV && import.meta.env.WXT_ALLOW_VOTE_CHANGE === '1';
 
 type FactCheckState =
   /** `progress`: the claims being checked (finished ones as results), once the server has extracted them. */
@@ -338,7 +340,7 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
     row.append(el('span', 'feedback-label', 'Is this finding relevant?'));
     const area = el('div', 'vote-area');
     if (state?.status === 'sent') {
-      area.append(voteResults(state.vote, state.tally, import.meta.env.DEV ? () => {
+      area.append(voteResults(state.vote, state.tally, CAN_CHANGE_VOTE ? () => {
         votes.delete(findingKey(finding));
         refreshFinding(finding);
       } : null));
