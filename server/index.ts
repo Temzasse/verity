@@ -9,6 +9,7 @@ import {
   type FactCheckRequest,
   type FactCheckResponse,
   type FeedbackRequest,
+  type FeedbackResponse,
   type Finding,
   type StatsResponse,
   type VerifyResponse,
@@ -19,7 +20,19 @@ import { extractArticle, type ExtractedArticle } from './extract.ts';
 import { FACT_CHECK_PROMPT, factCheckWithClaude } from './factcheck.ts';
 import { SYSTEM_PROMPT } from './prompt.ts';
 import { VERIFIER_ENABLED, VERIFIER_VERSION, verifyFindings } from './verify.ts';
-import { addSpend, cacheKey, extractKey, factCheckKey, getCached, getStats, putCached, recordAnalysis, recordFeedback, spentToday } from './store.ts';
+import {
+  addSpend,
+  cacheKey,
+  extractKey,
+  factCheckKey,
+  findingVoteKey,
+  getCached,
+  getStats,
+  putCached,
+  recordAnalysis,
+  recordVote,
+  spentToday,
+} from './store.ts';
 
 const PORT = Number(process.env.PORT ?? 8787);
 const HOST = process.env.HOST ?? '127.0.0.1';
@@ -64,7 +77,8 @@ const FactCheckSchema = z.object({
 }) satisfies z.ZodType<FactCheckRequest>;
 
 const FeedbackSchema = z.object({
-  vote: z.enum(['agree', 'disagree']),
+  vote: z.enum(['yes', 'no', 'unsure']),
+  voterId: z.string().regex(/^[A-Za-z0-9-]{8,64}$/),
   url: z.string().max(4000),
   sentence: z.string().max(5000),
   quote: z.string().max(2000).optional(),
@@ -233,15 +247,17 @@ async function handleVerify(req: IncomingMessage, res: ServerResponse) {
   json(res, 200, { findings: checked, checked: ok } satisfies VerifyResponse);
 }
 
-/** A reader's verdict on one finding: the raw vote is logged, the counters feed GET /stats. */
+/** A reader's answer to "Is this finding relevant?": one vote per reader per finding, changeable. */
 async function handleFeedback(req: IncomingMessage, res: ServerResponse) {
   if (!checkPost(req, res)) return;
   const parsed = FeedbackSchema.safeParse(await readJson(req));
   if (!parsed.success) return json(res, 400, { error: 'Invalid request' });
   if (rateLimited(req, res, 'feedback')) return;
-  await recordFeedback(parsed.data);
-  console.log(`[server] feedback ${parsed.data.vote} on ${parsed.data.category} (${parsed.data.source}, ${parsed.data.client})`);
-  json(res, 200, { ok: true });
+  const { voterId, ...vote } = parsed.data;
+  const key = findingVoteKey(vote.url, vote.sentence, vote.technique);
+  const tally = await recordVote(key, voterId, vote.vote, vote.category, vote);
+  console.log(`[server] vote ${vote.vote} on ${vote.category} (${vote.source}, ${vote.client}): ${JSON.stringify(tally)}`);
+  json(res, 200, { tally } satisfies FeedbackResponse);
 }
 
 /** Shared checks for POST endpoints; returns false if a response was already sent. */

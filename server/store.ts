@@ -61,9 +61,11 @@ export async function addSpend(usd: number) {
   await writeFile(SPEND_FILE, JSON.stringify(spend, null, 2));
 }
 
-// ---------- Usage stats and reader feedback (shown on the landing page) ----------
+// ---------- Usage stats and reader votes (shown on the landing page) ----------
 
-export type Vote = 'agree' | 'disagree';
+/** Answers to "Is this finding relevant?". */
+export type Vote = 'yes' | 'no' | 'unsure';
+export type Tally = Record<Vote, number>;
 
 export type Stats = {
   /** Scans served (cached or not). */
@@ -71,44 +73,73 @@ export type Stats = {
   sentences: number;
   findings: number;
   findingsByCategory: Record<string, number>;
-  feedback: { agree: number; disagree: number; byCategory: Record<string, { agree: number; disagree: number }> };
+  /** Totals over all findings, one vote per reader per finding (computed from votes.json). */
+  feedback: Tally & { byCategory: Record<string, Tally> };
   since: string;
 };
 
-const STATS_FILE = join(DIR, 'stats.json');
-const FEEDBACK_FILE = join(DIR, 'feedback.jsonl');
-let stats: Stats | null = null;
-let statsWrite: Promise<void> = Promise.resolve();
+type StoredStats = Omit<Stats, 'feedback'>;
+/** Per finding: its category and each reader's current vote (a reader can change it). */
+type VoteBook = Record<string, { category: string; voters: Record<string, Vote> }>;
 
-async function loadStats(): Promise<Stats> {
+const STATS_FILE = join(DIR, 'stats.json');
+const VOTES_FILE = join(DIR, 'votes.json');
+const FEEDBACK_FILE = join(DIR, 'feedback.jsonl');
+let stats: StoredStats | null = null;
+let votes: VoteBook | null = null;
+let writes: Promise<void> = Promise.resolve();
+
+const emptyTally = (): Tally => ({ yes: 0, no: 0, unsure: 0 });
+
+async function loadStats(): Promise<StoredStats> {
   if (stats) return stats;
   try {
-    stats = JSON.parse(await readFile(STATS_FILE, 'utf8')) as Stats;
+    const { feedback: _old, ...rest } = JSON.parse(await readFile(STATS_FILE, 'utf8')) as Stats;
+    stats = rest;
   } catch {
-    stats = {
-      analyses: 0,
-      sentences: 0,
-      findings: 0,
-      findingsByCategory: {},
-      feedback: { agree: 0, disagree: 0, byCategory: {} },
-      since: new Date().toISOString(),
-    };
+    stats = { analyses: 0, sentences: 0, findings: 0, findingsByCategory: {}, since: new Date().toISOString() };
   }
   return stats;
 }
 
-// Stats live in memory and are written sequentially, so concurrent requests can't lose updates.
-function saveStats() {
-  statsWrite = statsWrite
+async function loadVotes(): Promise<VoteBook> {
+  if (votes) return votes;
+  try {
+    votes = JSON.parse(await readFile(VOTES_FILE, 'utf8')) as VoteBook;
+  } catch {
+    votes = {};
+  }
+  return votes;
+}
+
+// State lives in memory and is written sequentially, so concurrent requests can't lose updates.
+function save(file: string, value: unknown) {
+  writes = writes
     .then(async () => {
       await mkdir(DIR, { recursive: true });
-      await writeFile(STATS_FILE, JSON.stringify(stats, null, 2));
+      await writeFile(file, JSON.stringify(value, null, 2));
     })
-    .catch((err) => console.error('[server] saving stats failed', err));
+    .catch((err) => console.error(`[server] saving ${file} failed`, err));
+}
+
+function tallyOf(voters: Record<string, Vote>): Tally {
+  const t = emptyTally();
+  for (const v of Object.values(voters)) t[v]++;
+  return t;
 }
 
 export async function getStats(): Promise<Stats> {
-  return loadStats();
+  const [s, book] = [await loadStats(), await loadVotes()];
+  const feedback: Stats['feedback'] = { ...emptyTally(), byCategory: {} };
+  for (const { category, voters } of Object.values(book)) {
+    const t = tallyOf(voters);
+    const cat = (feedback.byCategory[category] ??= emptyTally());
+    for (const k of ['yes', 'no', 'unsure'] as const) {
+      feedback[k] += t[k];
+      cat[k] += t[k];
+    }
+  }
+  return { ...s, feedback };
 }
 
 export async function recordAnalysis(sentences: number, categories: string[]) {
@@ -117,16 +148,30 @@ export async function recordAnalysis(sentences: number, categories: string[]) {
   s.sentences += sentences;
   s.findings += categories.length;
   for (const c of categories) s.findingsByCategory[c] = (s.findingsByCategory[c] ?? 0) + 1;
-  saveStats();
+  save(STATS_FILE, s);
 }
 
-/** Appends one vote to feedback.jsonl (the raw record, for later review) and updates the counters. */
-export async function recordFeedback(entry: { vote: Vote; category: string } & Record<string, unknown>) {
+/** Same finding for every reader: page, sentence and technique. */
+export function findingVoteKey(url: string, sentence: string, technique: string): string {
+  return createHash('sha256').update(`${url}\n${sentence.replace(/\s+/g, ' ').trim()}\n${technique}`).digest('hex').slice(0, 24);
+}
+
+/**
+ * Records (or changes) one reader's vote on a finding and returns the finding's tally.
+ * The raw vote is also appended to feedback.jsonl for later review.
+ */
+export async function recordVote(
+  key: string,
+  voterId: string,
+  vote: Vote,
+  category: string,
+  raw: Record<string, unknown>,
+): Promise<Tally> {
   await mkdir(DIR, { recursive: true });
-  await appendFile(FEEDBACK_FILE, `${JSON.stringify({ ...entry, at: new Date().toISOString() })}\n`);
-  const s = await loadStats();
-  s.feedback[entry.vote]++;
-  const cat = (s.feedback.byCategory[entry.category] ??= { agree: 0, disagree: 0 });
-  cat[entry.vote]++;
-  saveStats();
+  await appendFile(FEEDBACK_FILE, `${JSON.stringify({ ...raw, key, at: new Date().toISOString() })}\n`);
+  const book = await loadVotes();
+  const entry = (book[key] ??= { category, voters: {} });
+  entry.voters[voterId] = vote;
+  save(VOTES_FILE, book);
+  return tallyOf(entry.voters);
 }

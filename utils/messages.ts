@@ -4,6 +4,7 @@ import type {
   FactCheckRequest,
   FactCheckResponse,
   FeedbackRequest,
+  FeedbackResponse,
   QuickRequest,
   QuickResponse,
   VerifyRequest,
@@ -20,7 +21,7 @@ export type CaptureRequest = { type: 'verity:capture' };
 export type ServerEndpoints = {
   '/analyze': { request: AnalysisRequest; response: AnalysisResponse };
   '/fact-check': { request: FactCheckRequest; response: FactCheckResponse };
-  '/feedback': { request: FeedbackRequest; response: { ok: true } };
+  '/feedback': { request: FeedbackRequest; response: FeedbackResponse };
   '/verify': { request: VerifyRequest; response: VerifyResponse };
 };
 export type ServerPath = keyof ServerEndpoints;

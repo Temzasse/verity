@@ -4,6 +4,7 @@ import type {
   FactCheckRequest,
   FactCheckResponse,
   FeedbackRequest,
+  FeedbackResponse,
   QuickRequest,
   QuickResponse,
   VerifyRequest,
@@ -47,9 +48,18 @@ export function factCheck(request: FactCheckRequest): Promise<FactCheckResponse>
   return callServer('/fact-check', request);
 }
 
-/** Records a reader's verdict on a finding (feeds the live false-positive numbers on the website). */
-export async function sendFeedback(request: FeedbackRequest): Promise<void> {
-  await callServer('/feedback', request);
+/** Records (or changes) the reader's answer to "Is this finding relevant?"; returns everyone's answers. */
+export async function sendFeedback(request: Omit<FeedbackRequest, 'voterId'>): Promise<FeedbackResponse> {
+  return callServer('/feedback', { ...request, voterId: await voterId() });
+}
+
+/** Random id for this browser, so each reader has one (changeable) vote per finding. Not linked to anything else. */
+async function voterId(): Promise<string> {
+  const stored = (await browser.storage.local.get('voterId')).voterId;
+  if (typeof stored === 'string' && stored) return stored;
+  const id = crypto.randomUUID();
+  await browser.storage.local.set({ voterId: id });
+  return id;
 }
 
 /** Re-scores on-device Quick findings with the server's independent confidence check. */

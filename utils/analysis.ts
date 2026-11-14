@@ -240,9 +240,15 @@ export type VerifyRequest = { request: AnalysisRequest; findings: Finding[] };
 /** Returned by POST /verify. `checked` is false when the check is off or failed (findings unchanged). */
 export type VerifyResponse = { findings: Finding[]; checked: boolean };
 
-/** Sent to POST /feedback when a reader rates a finding. */
+/** Answer to "Is this finding relevant?". */
+export type Vote = 'yes' | 'no' | 'unsure';
+export type VoteTally = Record<Vote, number>;
+
+/** Sent to POST /feedback when a reader answers "Is this finding relevant?" (sending again changes the vote). */
 export type FeedbackRequest = {
-  vote: 'agree' | 'disagree';
+  vote: Vote;
+  /** Random id kept by the reader's browser: one vote per reader per finding. */
+  voterId: string;
   url: string;
   sentence: string;
   quote?: string;
@@ -253,12 +259,16 @@ export type FeedbackRequest = {
   client: 'extension' | 'web';
 };
 
+/** Returned by POST /feedback: everyone's answers for this finding, including this reader's. */
+export type FeedbackResponse = { tally: VoteTally };
+
 /** Returned by GET /stats: usage and reader feedback since the server's stats started. */
 export type StatsResponse = {
   analyses: number;
   sentences: number;
   findings: number;
   findingsByCategory: Record<string, number>;
-  feedback: { agree: number; disagree: number; byCategory: Record<string, { agree: number; disagree: number }> };
+  /** One vote per reader per finding. */
+  feedback: VoteTally & { byCategory: Record<string, VoteTally> };
   since: string;
 };
