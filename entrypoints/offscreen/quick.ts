@@ -127,7 +127,7 @@ export async function quickAnalyze({ sentences }: QuickRequest): Promise<QuickRe
         category: best.c.category,
         technique: best.c.technique,
         confidence: round(Math.min(0.9, 0.35 + margin * 3 + (lexical ? 0.1 : 0))),
-        rationale: `On-device model: this sentence reads like examples of ${best.c.technique.toLowerCase()}${lexical ? ` ("${lexical.quote}")` : ''}.`,
+        rationale: `Reads like typical examples of ${best.c.technique.toLowerCase()}${lexical ? ` ("${lexical.quote}")` : ''}.`,
         quote: lexical && lexical.category === best.c.category ? lexical.quote : undefined,
         source: 'quick',
       });
@@ -137,7 +137,7 @@ export async function quickAnalyze({ sentences }: QuickRequest): Promise<QuickRe
         category: lexical.category,
         technique: lexical.technique,
         confidence: 0.45,
-        rationale: `On-device word list: "${lexical.quote}" is ${lexical.category === 'unsupported-claim' ? 'an unattributed-source phrase' : 'charged wording'}.`,
+        rationale: `"${lexical.quote}" is ${lexical.category === 'unsupported-claim' ? 'an unattributed-source phrase' : 'charged wording'}.`,
         quote: lexical.quote,
         source: 'quick',
       });

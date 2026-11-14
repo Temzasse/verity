@@ -5,6 +5,7 @@ import { startScan, type Outcome } from './scan';
 import { playScanEffect } from './dither';
 import type { AnalysisResponse, Category, FactCheckResponse, QuickResponse } from '@/utils/analysis';
 import { CATEGORIES, VERDICTS, factCheck } from './analyze';
+import { confidenceGauge } from './gauge';
 import type { PageContent } from './extract';
 import { applyHighlights, clearHighlights, setActiveHighlight, type PlacedFinding } from './highlight';
 
@@ -151,8 +152,8 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
     tooltip.replaceChildren(
       el('div', 'tooltip-head', [
         chip(finding.category),
-        ...(finding.source === 'quick' ? [el('span', 'tag', 'Quick · on-device')] : []),
-        el('span', 'confidence', `${Math.round(finding.confidence * 100)}% confidence`),
+        ...(finding.source === 'quick' ? [el('span', 'tag', 'Quick')] : []),
+        confidenceGauge(finding.confidence),
       ]),
       ...(finding.technique ? [el('p', 'technique', finding.technique)] : []),
       el('p', 'rationale', finding.rationale),
@@ -312,16 +313,16 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
       children.push(el('p', 'muted', 'No article text found on this page.'));
     } else {
       // Quick findings first (they arrive first), then the smart analysis below them.
-      if (!quick) children.push(el('p', 'muted', 'Running on-device model…'));
-      else if (!quick.ok) children.push(el('p', 'muted note', `On-device model unavailable: ${quick.error}`));
+      if (!quick) children.push(el('p', 'muted', 'Looking for quick findings…'));
+      else if (!quick.ok) children.push(el('p', 'muted note', `Quick findings unavailable: ${quick.error}`));
       else if (quickPlaced.length) {
         children.push(
-          sectionTitle('Quick findings', `on-device · ${quick.data.ms < 1000 ? `${quick.data.ms} ms` : `${(quick.data.ms / 1000).toFixed(1)} s`}`),
-          ...(smart?.ok ? [] : [el('p', 'muted note', 'From a small on-device model, shown while the smart analysis runs. Less accurate.')]),
+          sectionTitle('Quick findings'),
+          ...(smart?.ok ? [] : [el('p', 'muted note', 'A fast first look while the smart analysis runs. Less accurate.')]),
           findingList(quickPlaced, new Set()),
         );
       } else if (!smart?.ok) {
-        children.push(el('p', 'muted note', 'Quick findings: nothing flagged on-device.'));
+        children.push(el('p', 'muted note', 'Quick findings: nothing flagged.'));
       }
 
       if (!smart) children.push(el('p', 'muted status checking', 'Running smart analysis…'));
@@ -343,8 +344,8 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
     if (activeKey) showFinding(placed.find((f) => findingKey(f) === activeKey) ?? null, { scroll: false });
   }
 
-  function sectionTitle(title: string, detail: string) {
-    return el('p', 'section-title', [document.createTextNode(title), el('span', 'section-detail', detail)]);
+  function sectionTitle(title: string, detail?: string) {
+    return el('p', 'section-title', [document.createTextNode(title), ...(detail ? [el('span', 'section-detail', detail)] : [])]);
   }
 
   function findingList(findings: PlacedFinding[], alsoQuick: Set<number>) {
@@ -352,7 +353,7 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
     for (const f of findings) {
       const head = [chip(f.category), el('span', 'confidence', `${Math.round(f.confidence * 100)}%`)];
       if (f.source === 'quick') head.splice(1, 0, el('span', 'tag', 'Quick'));
-      else if (alsoQuick.has(f.sentenceId)) head.splice(1, 0, el('span', 'tag', 'Also on-device'));
+      else if (alsoQuick.has(f.sentenceId)) head.splice(1, 0, el('span', 'tag', 'Also in Quick'));
       const button = el('button', `finding${f.source === 'quick' ? ' quick' : ''}`, [
         el('div', 'finding-head', head),
         ...(f.technique ? [el('p', 'technique', f.technique)] : []),

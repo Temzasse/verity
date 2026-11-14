@@ -381,3 +381,15 @@ h1 {
   background: transparent;
   border: 1px dashed var(--v-border);
 }
+
+/* Confidence gauge (tooltip) */
+.gauge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+.gauge svg {
+  display: block;
+  flex: none;
+}
