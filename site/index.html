@@ -41,7 +41,7 @@
             <h1 class="hero-logo"><img src="assets/verity-wordmark.svg" alt="Verity" /></h1>
             <p class="tagline">See the whole story</p>
             <p class="lede">
-              Verity scans the article you’re reading, highlights manipulative language and questionable claims, and explains in plain words which
+              Verity scans the content you’re reading, highlights manipulative language and questionable claims, and explains in plain words which
               technique is being used, so you learn <em>why</em> a sentence is trying to steer you, not just that it is.
             </p>
             <div class="hero-actions">
@@ -75,19 +75,19 @@
       <section class="section" id="try">
         <div class="wrap">
           <p class="section-eyebrow">Try it</p>
-          <h2>Check an article right here.</h2>
+          <h2>Check what you’re reading, right here.</h2>
           <p class="section-lede">
-            Paste a link or the text of a news article or blog post. This runs the same Smart analysis as the extension; the extension also adds
+            Paste a link or the text of a news story, blog post, opinion piece or any other page. This runs the same Smart analysis as the extension; the extension also adds
             instant Quick findings and highlights straight on the page.
           </p>
           <div class="card try">
             <div class="try-tabs" role="tablist" aria-label="Input type">
-              <button type="button" role="tab" data-try-mode="url" aria-selected="true">Article link</button>
+              <button type="button" role="tab" data-try-mode="url" aria-selected="true">Link</button>
               <button type="button" role="tab" data-try-mode="text" aria-selected="false">Paste text</button>
             </div>
             <form id="try-form" class="try-form">
-              <input id="try-url" type="url" placeholder="https://www.example.com/news/article" aria-label="Article link" required />
-              <textarea id="try-text" rows="7" maxlength="30000" placeholder="Paste the article text here…" aria-label="Article text" hidden></textarea>
+              <input id="try-url" type="url" placeholder="https://www.example.com/news/article" aria-label="Page link" required />
+              <textarea id="try-text" rows="7" maxlength="30000" placeholder="Paste the text here…" aria-label="Text to check" hidden></textarea>
               <button class="button button-primary" type="submit">Analyze</button>
             </form>
             <div class="try-examples">
@@ -260,7 +260,8 @@
       </section>
 
       <!-- Install -->
-      <section class="section section-tinted" id="install">
+      <section class="section section-tinted install-section" id="install">
+        <canvas class="install-dither" data-dither data-dither-below="#install .section-lede" aria-hidden="true"></canvas>
         <div class="wrap install">
           <div class="install-copy">
             <p class="section-eyebrow">Install</p>
@@ -325,6 +326,7 @@
     </footer>
 
     <script src="try.js" type="module"></script>
+    <script src="dither.js" type="module"></script>
     <script>
       // Footer API status: a live check against the analysis server.
       (async () => {
