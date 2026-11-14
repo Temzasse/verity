@@ -616,6 +616,12 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
         state.quick = quick;
         renderState(state);
       });
+      // Then swap in the independently checked confidences for the Quick findings.
+      void scan.quickChecked.then((checked) => {
+        if (id !== scanId || !checked) return;
+        state.quick = { ok: true, data: checked };
+        renderState(state);
+      });
       await playScanEffect({ canvas, line: sweep, screenshot, color, durationMs: SCAN_EFFECT_MS, until: scan.smart });
       if (id !== scanId) return;
       state.smart = await scan.smart;

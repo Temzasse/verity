@@ -11,6 +11,8 @@ import {
   type FeedbackRequest,
   type Finding,
   type StatsResponse,
+  type VerifyResponse,
+  TECHNIQUE_IDS,
 } from '../utils/analysis.ts';
 import { AnalysisError, MODEL, analyzeWithClaude } from './claude.ts';
 import { extractArticle, type ExtractedArticle } from './extract.ts';
@@ -33,6 +35,7 @@ const RATE_LIMITS = {
   'fact-check': Number(process.env.RATE_FACTCHECK_PER_HOUR ?? 15),
   extract: Number(process.env.RATE_EXTRACT_PER_HOUR ?? 30),
   feedback: Number(process.env.RATE_FEEDBACK_PER_HOUR ?? 120),
+  verify: Number(process.env.RATE_VERIFY_PER_HOUR ?? 120),
 };
 // Changing a prompt invalidates its cached results.
 const PROMPT_VERSION = createHash('sha256').update(SYSTEM_PROMPT).digest('hex').slice(0, 8);
@@ -74,6 +77,24 @@ const FeedbackSchema = z.object({
 
 const ExtractSchema = z.object({ url: z.string().min(1).max(4000) });
 
+const VerifySchema = z.object({
+  request: RequestSchema,
+  findings: z
+    .array(
+      z.object({
+        sentenceId: z.number().int().nonnegative(),
+        category: z.enum(CATEGORY_IDS),
+        technique: z.string().max(200),
+        techniqueId: z.enum(TECHNIQUE_IDS).optional(),
+        confidence: z.number().min(0).max(1),
+        rationale: z.string().max(2000),
+        quote: z.string().max(2000).optional(),
+        source: z.enum(['smart', 'quick']).optional(),
+      }),
+    )
+    .max(30),
+});
+
 if (!process.env.ANTHROPIC_API_KEY) {
   console.warn('[server] ANTHROPIC_API_KEY is not set. Copy server/.env.example to server/.env and add your key.');
 }
@@ -87,6 +108,7 @@ createServer(async (req, res) => {
     if (req.method === 'POST' && req.url === '/fact-check') return await handleFactCheck(req, res);
     if (req.method === 'POST' && req.url === '/extract') return await handleExtract(req, res);
     if (req.method === 'POST' && req.url === '/feedback') return await handleFeedback(req, res);
+    if (req.method === 'POST' && req.url === '/verify') return await handleVerify(req, res);
     if (req.method === 'GET' && req.url === '/techniques') return json(res, 200, TECHNIQUES);
     if (req.method === 'GET' && req.url === '/stats') return json(res, 200, (await getStats()) satisfies StatsResponse);
     json(res, 404, { error: 'Not found' });
@@ -187,6 +209,28 @@ async function handleExtract(req: IncomingMessage, res: ServerResponse) {
   await putCached(key, { at: Date.now(), article });
   console.log(`[server] extracted ${article.paragraphs.length} paragraphs: ${article.url}`);
   json(res, 200, article);
+}
+
+/** Re-scores the extension's on-device Quick findings with the independent confidence check (cheap, ~0.3 s). */
+async function handleVerify(req: IncomingMessage, res: ServerResponse) {
+  if (!checkPost(req, res)) return;
+  const parsed = VerifySchema.safeParse(await readJson(req));
+  if (!parsed.success) return json(res, 400, { error: 'Invalid request' });
+  const { request, findings } = parsed.data;
+  if (!VERIFIER_ENABLED || findings.length === 0) return json(res, 200, { findings, checked: false } satisfies VerifyResponse);
+
+  const key = createHash('sha256')
+    .update(JSON.stringify({ v: VERIFIER_VERSION, url: request.url, sentences: request.sentences, findings }))
+    .digest('hex')
+    .slice(0, 32);
+  const cached = await getCached<Finding[]>(`verify-${key}`);
+  if (cached) return json(res, 200, { findings: cached, checked: true } satisfies VerifyResponse);
+  if (rateLimited(req, res, 'verify')) return;
+
+  const checked = await verifyFindings(findings, request, 'quick');
+  const ok = checked.every((f) => f.verified);
+  if (ok) await putCached(`verify-${key}`, checked);
+  json(res, 200, { findings: checked, checked: ok } satisfies VerifyResponse);
 }
 
 /** A reader's verdict on one finding: the raw vote is logged, the counters feed GET /stats. */
