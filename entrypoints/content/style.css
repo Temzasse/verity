@@ -349,3 +349,35 @@ h1 {
 @keyframes v-pulse {
   50% { opacity: 0.45; }
 }
+
+/* Panel sections: Smart analysis + Quick findings (on-device) */
+.section-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin: 14px 0 8px !important;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.section-detail {
+  font-size: 11px;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--v-muted);
+}
+.tag {
+  padding: 0 6px;
+  border: 1px solid var(--v-border);
+  border-radius: 999px;
+  font-size: 10px;
+  color: var(--v-muted);
+  white-space: nowrap;
+}
+.finding.quick {
+  background: transparent;
+  border: 1px dashed var(--v-border);
+}

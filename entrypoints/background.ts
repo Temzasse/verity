@@ -1,4 +1,12 @@
-import { SCAN_MESSAGE, type CaptureRequest, type ServerReply, type ServerRequest } from '@/utils/messages';
+import {
+  SCAN_MESSAGE,
+  type CaptureRequest,
+  type QuickMessage,
+  type QuickReply,
+  type QuickRunRequest,
+  type ServerReply,
+  type ServerRequest,
+} from '@/utils/messages';
 
 /** Analysis server (server/). Override with WXT_API_URL in .env when it's deployed elsewhere. */
 const API_URL: string = import.meta.env.WXT_API_URL || 'http://localhost:8787';
@@ -7,6 +15,8 @@ export default defineBackground(() => {
   // Toolbar button (no popup) → scan the active tab.
   browser.action.onClicked.addListener(async (tab) => {
     if (tab.id == null) return;
+    // Start loading the on-device model right away so Quick findings are ready sooner.
+    void ensureOffscreen().catch((err) => console.warn('[Verity] offscreen failed', err));
     try {
       await sendScan(tab.id);
     } catch (err) {
@@ -29,6 +39,18 @@ export default defineBackground(() => {
     return true;
   });
 
+  // On-device quick model: forwarded to the offscreen document that runs it.
+  browser.runtime.onMessage.addListener((message: QuickMessage, _sender, sendResponse) => {
+    if (message?.type !== 'verity:quick') return false;
+    runQuick(message.body)
+      .catch((err): QuickReply => ({ ok: false, error: err instanceof Error ? err.message : String(err) }))
+      .then((reply) => {
+        console.log('[Verity] quick reply:', reply.ok ? `${reply.data.findings.length} findings in ${reply.data.ms} ms (${reply.data.device})` : reply.error);
+        sendResponse(reply);
+      });
+    return true;
+  });
+
   // Server calls (analysis, fact-checks) go through the background: extension pages aren't subject
   // to the page's CSP or CORS, and the server URL/token stay out of the page.
   browser.runtime.onMessage.addListener((message: ServerRequest, _sender, sendResponse) => {
@@ -43,6 +65,28 @@ export default defineBackground(() => {
     return true;
   });
 });
+
+const OFFSCREEN_URL = '/offscreen.html';
+let creatingOffscreen: Promise<void> | undefined;
+
+/** Creates the offscreen document that hosts the on-device model (once). */
+async function ensureOffscreen() {
+  const url = browser.runtime.getURL(OFFSCREEN_URL);
+  const contexts = await browser.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'], documentUrls: [url] });
+  if (contexts.length) return;
+  creatingOffscreen ??= browser.offscreen
+    .createDocument({ url: OFFSCREEN_URL, reasons: ['WORKERS'], justification: 'Run the on-device text classification model' })
+    .finally(() => (creatingOffscreen = undefined));
+  await creatingOffscreen;
+}
+
+async function runQuick(body: QuickMessage['body']): Promise<QuickReply> {
+  await ensureOffscreen();
+  const reply = (await browser.runtime.sendMessage({ type: 'verity:quick-run', body } satisfies QuickRunRequest)) as
+    | QuickReply
+    | undefined;
+  return reply ?? { ok: false, error: 'On-device model did not respond' };
+}
 
 async function callServer({ path, body }: ServerRequest): Promise<ServerReply> {
   let res: Response;

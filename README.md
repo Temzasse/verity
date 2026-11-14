@@ -41,6 +41,15 @@ It listens on `http://127.0.0.1:8787`, restarts on file changes, and logs tokens
 - **Budget:** `DAILY_BUDGET_USD` (default $1) stops Claude calls for the day once reached. `GET /health` shows today's spend.
 - **Prompt:** `server/prompt.ts`. Editing it invalidates cached results automatically.
 
+## Quick findings (on-device model)
+
+Each scan also runs a small model in the browser, so first results show up before Claude answers. These are labelled **Quick** in the panel and drawn with a dotted underline.
+
+- **Model:** `Xenova/all-MiniLM-L6-v2` sentence embeddings (~23 MB) via Transformers.js, on WebGPU when available, otherwise WASM. It runs in an offscreen document (`entrypoints/offscreen/`). The model downloads from Hugging Face on first use and is then cached; page text never leaves the browser for this step.
+- **How it classifies:** compares each sentence with example sentences per technique in `entrypoints/offscreen/exemplars.ts`, and a word list of charged wording in `quick.ts`. Add examples there to improve it. Thresholds are at the top of `quick.ts`.
+- **Merging:** once Claude's analysis arrives, Quick findings on sentences Claude also flagged are folded into Claude's findings (tagged "Also on-device"); the rest stay under "Quick findings".
+- The ONNX Runtime WASM files are copied into the build (`ort/`) by a hook in `wxt.config.ts`, because MV3 extensions can't load code from a CDN.
+
 ## Project layout
 
 ```

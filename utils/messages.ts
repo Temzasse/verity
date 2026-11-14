@@ -1,4 +1,11 @@
-import type { AnalysisRequest, AnalysisResponse, FactCheckRequest, FactCheckResponse } from './analysis';
+import type {
+  AnalysisRequest,
+  AnalysisResponse,
+  FactCheckRequest,
+  FactCheckResponse,
+  QuickRequest,
+  QuickResponse,
+} from './analysis';
 
 /** Background → content script. */
 export type VerityMessage = { type: 'verity:scan' };
@@ -22,6 +29,12 @@ export type ServerRequest<P extends ServerPath = ServerPath> = {
 export type ServerReply<P extends ServerPath = ServerPath> =
   | { ok: true; data: ServerEndpoints[P]['response'] }
   | { ok: false; error: string };
+
+/** Content script → background (on-device quick model). */
+export type QuickMessage = { type: 'verity:quick'; body: QuickRequest };
+/** Background → offscreen document, which runs the model. */
+export type QuickRunRequest = { type: 'verity:quick-run'; body: QuickRequest };
+export type QuickReply = { ok: true; data: QuickResponse } | { ok: false; error: string };
 
 export const SCAN_MESSAGE: VerityMessage = { type: 'verity:scan' };
 export const CAPTURE_MESSAGE: CaptureRequest = { type: 'verity:capture' };

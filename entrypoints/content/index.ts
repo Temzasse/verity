@@ -1,15 +1,22 @@
 import './style.css';
 import type { ContentScriptContext } from 'wxt/utils/content-script-context';
 import { CAPTURE_MESSAGE, type VerityMessage } from '@/utils/messages';
-import { scanPage, type ScanResult } from './scan';
+import { startScan, type Outcome } from './scan';
 import { playScanEffect } from './dither';
-import type { Category, FactCheckResponse } from '@/utils/analysis';
+import type { AnalysisResponse, Category, FactCheckResponse, QuickResponse } from '@/utils/analysis';
 import { CATEGORIES, VERDICTS, factCheck } from './analyze';
 import type { PageContent } from './extract';
 import { applyHighlights, clearHighlights, setActiveHighlight, type PlacedFinding } from './highlight';
 
 /** Categories whose findings get a "Check this claim" button (factual claims, not rhetoric). */
 const CHECKABLE = new Set<Category>(['unsupported-claim', 'misinformation', 'missing-context']);
+
+/** null = still running. */
+type ViewState = {
+  content: PageContent;
+  quick: Outcome<QuickResponse> | null;
+  smart: Outcome<AnalysisResponse> | null;
+};
 
 type FactCheckState =
   | { status: 'loading' }
@@ -45,7 +52,7 @@ export default defineContentScript({
       void (async () => {
         try {
           panel ??= await createPanel(ctx, () => (panel = undefined));
-          await panel.scan(scanPage);
+          await panel.scan();
         } finally {
           busy = false;
         }
@@ -55,7 +62,7 @@ export default defineContentScript({
 });
 
 type Panel = {
-  scan(run: () => Promise<ScanResult>): Promise<void>;
+  scan(): Promise<void>;
 };
 
 async function createPanel(ctx: ContentScriptContext, onClose: () => void): Promise<Panel> {
@@ -144,6 +151,7 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
     tooltip.replaceChildren(
       el('div', 'tooltip-head', [
         chip(finding.category),
+        ...(finding.source === 'quick' ? [el('span', 'tag', 'Quick · on-device')] : []),
         el('span', 'confidence', `${Math.round(finding.confidence * 100)}% confidence`),
       ]),
       ...(finding.technique ? [el('p', 'technique', finding.technique)] : []),
@@ -230,16 +238,8 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
 
   /** Re-renders the tooltip (if this finding is open) and its panel item after a fact-check update. */
   function refreshFinding(finding: PlacedFinding) {
-    const key = findingKey(finding);
-    const state = factChecks.get(key);
-    const item = body.querySelector(`.finding[data-key="${CSS.escape(key)}"] .finding-head`);
-    item?.querySelector('.verdict-dot')?.remove();
-    if (item && state?.status === 'done') {
-      const dot = el('span', 'verdict-dot', VERDICTS[state.data.verdict].label);
-      dot.style.setProperty('--cat', VERDICTS[state.data.verdict].color);
-      item.append(dot);
-    }
-    if (active && findingKey(active) === key) showFinding(active, { scroll: false });
+    addVerdictBadge(finding);
+    if (active && findingKey(active) === findingKey(finding)) showFinding(active, { scroll: false });
   }
 
   /** The finding whose highlighted text is under the given viewport point, if any. */
@@ -285,23 +285,76 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
   document.addEventListener('pointermove', onPagePointerMove, { capture: true, passive: true });
   document.addEventListener('keydown', onKeyDown, true);
 
-  function renderResult(result: ScanResult) {
-    if (!result.ok) {
-      placed = [];
-      body.replaceChildren(
-        el('p', 'label', 'Scan failed'),
-        el('p', 'error', result.error),
-        el('p', 'muted note', 'Check the analysis server terminal for details.'),
-      );
-      return;
-    }
-    const { content, analysis } = result;
+  /**
+   * Renders the panel and highlights for the current scan state. Called when the on-device Quick
+   * findings arrive and again when the smart analysis does (null = still running).
+   */
+  function renderState({ content, quick, smart }: ViewState) {
     article = content;
-    placed = applyHighlights(analysis.findings, content.sentences);
+    const n = content.sentences.length;
+    const smartFindings = smart?.ok ? smart.data.findings.map((f) => ({ ...f, source: 'smart' as const })) : [];
+    const smartSentences = new Set(smartFindings.map((f) => f.sentenceId));
+    const quickAll = quick?.ok ? quick.data.findings : [];
+    const quickSentences = new Set(quickAll.map((f) => f.sentenceId));
+    // Once the smart analysis has reviewed the page, Quick findings on sentences it also flagged fold into its findings.
+    const quickShown = smart?.ok ? quickAll.filter((f) => !smartSentences.has(f.sentenceId)) : quickAll;
+
+    const activeKey = active ? findingKey(active) : null;
+    placed = applyHighlights([...smartFindings, ...quickShown], content.sentences);
+    const smartPlaced = placed.filter((f) => f.source !== 'quick');
+    const quickPlaced = placed.filter((f) => f.source === 'quick');
+
+    const children: Node[] = [
+      el('p', 'label', content.isArticle ? 'Article' : 'Page'),
+      el('p', 'title', content.title || location.hostname),
+    ];
+    if (!n) {
+      children.push(el('p', 'muted', 'No article text found on this page.'));
+    } else {
+      // Quick findings first (they arrive first), then the smart analysis below them.
+      if (!quick) children.push(el('p', 'muted', 'Running on-device model…'));
+      else if (!quick.ok) children.push(el('p', 'muted note', `On-device model unavailable: ${quick.error}`));
+      else if (quickPlaced.length) {
+        children.push(
+          sectionTitle('Quick findings', `on-device · ${quick.data.ms < 1000 ? `${quick.data.ms} ms` : `${(quick.data.ms / 1000).toFixed(1)} s`}`),
+          ...(smart?.ok ? [] : [el('p', 'muted note', 'From a small on-device model, shown while the smart analysis runs. Less accurate.')]),
+          findingList(quickPlaced, new Set()),
+        );
+      } else if (!smart?.ok) {
+        children.push(el('p', 'muted note', 'Quick findings: nothing flagged on-device.'));
+      }
+
+      if (!smart) children.push(el('p', 'muted status checking', 'Running smart analysis…'));
+      else if (!smart.ok) children.push(el('p', 'section-title', 'Smart analysis'), el('p', 'error', smart.error));
+      else {
+        children.push(
+          sectionTitle('Smart analysis', smartPlaced.length ? `${smartPlaced.length} flagged of ${n} sentences` : `nothing flagged in ${n} sentences`),
+        );
+        if (smartPlaced.length) children.push(findingList(smartPlaced, quickSentences));
+      }
+    }
+    if (smart?.ok) {
+      if (smart.data.cached) console.debug('[Verity] smart analysis served from cache');
+      children.push(el('p', 'muted note', 'Findings are produced by AI and can be wrong.'));
+    }
+    body.replaceChildren(...children);
+
+    for (const f of placed) addVerdictBadge(f);
+    if (activeKey) showFinding(placed.find((f) => findingKey(f) === activeKey) ?? null, { scroll: false });
+  }
+
+  function sectionTitle(title: string, detail: string) {
+    return el('p', 'section-title', [document.createTextNode(title), el('span', 'section-detail', detail)]);
+  }
+
+  function findingList(findings: PlacedFinding[], alsoQuick: Set<number>) {
     const list = el('ol', 'findings');
-    for (const f of placed) {
-      const button = el('button', 'finding', [
-        el('div', 'finding-head', [chip(f.category), el('span', 'confidence', `${Math.round(f.confidence * 100)}%`)]),
+    for (const f of findings) {
+      const head = [chip(f.category), el('span', 'confidence', `${Math.round(f.confidence * 100)}%`)];
+      if (f.source === 'quick') head.splice(1, 0, el('span', 'tag', 'Quick'));
+      else if (alsoQuick.has(f.sentenceId)) head.splice(1, 0, el('span', 'tag', 'Also on-device'));
+      const button = el('button', `finding${f.source === 'quick' ? ' quick' : ''}`, [
+        el('div', 'finding-head', head),
         ...(f.technique ? [el('p', 'technique', f.technique)] : []),
         el('p', 'excerpt', truncate(f.sentence.text, 140)),
       ]);
@@ -310,20 +363,20 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
       button.addEventListener('click', () => showFinding(f));
       list.append(el('li', null, [button]));
     }
+    return list;
+  }
 
-    const summary = !content.sentences.length
-      ? 'No article text found on this page.'
-      : placed.length
-        ? `${placed.length} flagged of ${content.sentences.length} sentences`
-        : `Nothing flagged in ${content.sentences.length} sentences.`;
-    const source = `Analyzed by ${modelLabel(analysis.model)}${analysis.cached ? ' (cached)' : ''}. AI analysis can be wrong.`;
-    body.replaceChildren(
-      el('p', 'label', content.isArticle ? 'Article' : 'Page'),
-      el('p', 'title', content.title || location.hostname),
-      el('p', 'muted', summary),
-      ...(placed.length ? [list] : []),
-      el('p', 'muted note', source),
-    );
+  /** Shows a finished fact-check's verdict on the finding's panel item. */
+  function addVerdictBadge(f: PlacedFinding) {
+    const key = findingKey(f);
+    const state = factChecks.get(key);
+    const head = body.querySelector(`.finding[data-key="${CSS.escape(key)}"] .finding-head`);
+    head?.querySelector('.verdict-dot')?.remove();
+    if (head && state?.status === 'done') {
+      const dot = el('span', 'verdict-dot', VERDICTS[state.data.verdict].label);
+      dot.style.setProperty('--cat', VERDICTS[state.data.verdict].color);
+      head.append(dot);
+    }
   }
 
   const hide = () => {
@@ -336,8 +389,11 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
     layer.showPopover();
   };
 
+  let scanId = 0;
+
   return {
-    async scan(run) {
+    async scan() {
+      const id = ++scanId;
       // Screenshot the page without our overlay in it, for the dither effect.
       hide();
       await nextFrames(2);
@@ -355,20 +411,27 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
       article = null;
       factChecks.clear();
       raise();
-      body.innerHTML = `<p class="muted">Scanning page…</p>`;
+      body.replaceChildren(el('p', 'muted status checking', 'Scanning page…'));
 
       const color = getComputedStyle(sweep).getPropertyValue('background-color');
-      const resultPromise = run();
-      // After the first pass the page text is extracted; what's left is waiting on the model.
-      const statusTimer = setTimeout(() => {
-        const status = body.querySelector('.muted');
-        if (status) status.textContent = 'Analyzing with Claude…';
-      }, SCAN_EFFECT_MS);
-      await playScanEffect({ canvas, line: sweep, screenshot, color, durationMs: SCAN_EFFECT_MS, until: resultPromise });
-      clearTimeout(statusTimer);
-      const result = await resultPromise;
+      const scan = startScan();
+      if (!scan.content.ok) {
+        await playScanEffect({ canvas, line: sweep, screenshot, color, durationMs: SCAN_EFFECT_MS });
+        body.replaceChildren(el('p', 'label', 'Scan failed'), el('p', 'error', scan.content.error));
+        return;
+      }
+      const state: ViewState = { content: scan.content.data, quick: null, smart: null };
 
-      renderResult(result);
+      // Quick findings show up as soon as the on-device model answers, while the sweep continues.
+      void scan.quick.then((quick) => {
+        if (id !== scanId) return;
+        state.quick = quick;
+        renderState(state);
+      });
+      await playScanEffect({ canvas, line: sweep, screenshot, color, durationMs: SCAN_EFFECT_MS, until: scan.smart });
+      if (id !== scanId) return;
+      state.smart = await scan.smart;
+      renderState(state);
     },
   };
 }
@@ -391,12 +454,8 @@ function chip(category: keyof typeof CATEGORIES) {
   return node;
 }
 
-function findingKey(f: { sentenceId: number; category: string }) {
-  return `${f.sentenceId}:${f.category}`;
-}
-
-function modelLabel(model: string) {
-  return model === 'claude-haiku-5-5' ? 'Claude Haiku 5.5' : model;
+function findingKey(f: { sentenceId: number; category: string; source?: string }) {
+  return `${f.source ?? 'smart'}:${f.sentenceId}:${f.category}`;
 }
 
 function truncate(text: string, max: number) {

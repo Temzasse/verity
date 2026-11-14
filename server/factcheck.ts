@@ -71,8 +71,8 @@ export async function factCheckWithClaude(req: FactCheckRequest) {
     messages.push({ role: 'assistant', content: response.content });
   }
 
-  if (response?.stop_reason === 'refusal') throw new AnalysisError('Claude declined to fact-check this claim', 422);
-  if (response?.stop_reason === 'max_tokens') throw new AnalysisError('Fact-check was cut off (max_tokens)', 502);
+  if (response?.stop_reason === 'refusal') throw new AnalysisError('This claim could not be fact-checked.', 422);
+  if (response?.stop_reason === 'max_tokens') throw new AnalysisError('The fact-check was cut off. Try again.', 502);
 
   // Text is split into several blocks around citations; join it back together.
   const text = content

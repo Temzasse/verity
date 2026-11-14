@@ -17,15 +17,16 @@ export function applyHighlights(findings: Finding[], sentences: ArticleSentence[
   ensureStyle();
 
   const placed: PlacedFinding[] = [];
-  const byCategory = new Map<Category, Range[]>();
+  const byName = new Map<string, Range[]>();
   for (const f of findings) {
     const sentence = sentences[f.sentenceId];
     if (!sentence) continue;
     const range = (f.quote && findQuote(sentence.range, f.quote)) || sentence.range;
     placed.push({ ...f, range, sentence });
-    byCategory.set(f.category, [...(byCategory.get(f.category) ?? []), range]);
+    const key = f.source === 'quick' ? quickName(f.category) : name(f.category);
+    byName.set(key, [...(byName.get(key) ?? []), range]);
   }
-  for (const [category, ranges] of byCategory) CSS.highlights.set(name(category), new Highlight(...ranges));
+  for (const [key, ranges] of byName) CSS.highlights.set(key, new Highlight(...ranges));
   return placed;
 }
 
@@ -41,12 +42,17 @@ export function setActiveHighlight(finding: PlacedFinding | null) {
 }
 
 export function clearHighlights() {
-  for (const id of Object.keys(CATEGORIES)) CSS.highlights.delete(name(id as Category));
+  for (const id of Object.keys(CATEGORIES)) {
+    CSS.highlights.delete(name(id as Category));
+    CSS.highlights.delete(quickName(id as Category));
+  }
   CSS.highlights.delete(ACTIVE);
   document.getElementById(STYLE_ID)?.remove();
 }
 
 const name = (c: Category) => `verity-${c}`;
+/** Quick (on-device, unreviewed) findings: lighter fill and dotted underline. */
+const quickName = (c: Category) => `verity-quick-${c}`;
 
 function ensureStyle(): HTMLStyleElement {
   let style = document.getElementById(STYLE_ID) as HTMLStyleElement | null;
@@ -60,13 +66,18 @@ function ensureStyle(): HTMLStyleElement {
 }
 
 function css(active: Category | null) {
-  const rules = Object.entries(CATEGORIES).map(
-    ([id, { color }]) => `::highlight(${name(id as Category)}) {
+  const rules = Object.entries(CATEGORIES).flatMap(([id, { color }]) => [
+    `::highlight(${name(id as Category)}) {
       background-color: color-mix(in srgb, ${color} 22%, transparent);
       text-decoration: underline 2px ${color};
       text-underline-offset: 3px;
     }`,
-  );
+    `::highlight(${quickName(id as Category)}) {
+      background-color: color-mix(in srgb, ${color} 10%, transparent);
+      text-decoration: underline dotted 2px ${color};
+      text-underline-offset: 3px;
+    }`,
+  ]);
   // Pointer cursor while hovering a highlight (toggled from the content script).
   rules.push(`html[data-verity-hover], html[data-verity-hover] * { cursor: pointer !important; }`);
   if (active) {

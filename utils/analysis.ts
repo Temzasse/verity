@@ -51,7 +51,13 @@ export type Finding = {
   rationale: string;
   /** Exact words within the sentence that triggered the finding. Omitted = whole sentence. */
   quote?: string;
+  /** Who produced it: the smart (server AI) analysis, the default, or the on-device quick model. */
+  source?: 'smart' | 'quick';
 };
+
+/** Sent to the on-device quick model (offscreen document). */
+export type QuickRequest = { sentences: { id: number; text: string }[] };
+export type QuickResponse = { findings: Finding[]; ms: number; device: string };
 
 /** Sent by the extension to POST /analyze. */
 export type AnalysisRequest = {

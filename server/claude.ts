@@ -28,7 +28,10 @@ const FindingsSchema = z.object({
 let client: Anthropic | undefined;
 export function getClient(): Anthropic {
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) throw new AnalysisError('ANTHROPIC_API_KEY is not set. Add it to server/.env and restart `pnpm server`.', 500);
+  if (!apiKey) {
+    console.error('[claude] ANTHROPIC_API_KEY is not set. Add it to server/.env and restart `pnpm server`.');
+    throw new AnalysisError('The analysis server is missing its API key (server/.env).', 500);
+  }
   client ??= new Anthropic({ apiKey });
   return client;
 }
@@ -66,20 +69,29 @@ export async function analyzeWithClaude(req: AnalysisRequest): Promise<{ finding
       `cacheWrite=${u.cache_creation_input_tokens ?? 0} stop=${response.stop_reason} cost=$${costUsd.toFixed(4)}`,
   );
 
-  if (response.stop_reason === 'refusal') throw new AnalysisError('Claude declined to analyze this page', 422);
-  if (response.stop_reason === 'max_tokens') throw new AnalysisError('Analysis was cut off (max_tokens)', 502);
-  if (!response.parsed_output) throw new AnalysisError('Claude returned output that did not match the schema', 502);
+  if (response.stop_reason === 'refusal') throw new AnalysisError('The smart analysis could not analyze this page.', 422);
+  if (response.stop_reason === 'max_tokens') throw new AnalysisError('The smart analysis was cut off. Try again.', 502);
+  if (!response.parsed_output) throw new AnalysisError('The smart analysis returned an unexpected result. Try again.', 502);
 
   return { findings: validateFindings(response.parsed_output.findings, req), costUsd };
 }
 
-/** Maps SDK errors to messages the extension can show. */
+/**
+ * Maps SDK errors to messages the extension can show. End users see neutral wording; the
+ * specifics (which provider, status, message) go to the server log.
+ */
 export function toAnalysisError(err: unknown): unknown {
-  if (err instanceof Anthropic.AuthenticationError) return new AnalysisError('Invalid ANTHROPIC_API_KEY (check server/.env)', 500);
-  if (err instanceof Anthropic.RateLimitError) return new AnalysisError('Claude API rate limit hit, retry in a moment', 429);
-  if (err instanceof Anthropic.BadRequestError) return new AnalysisError(`Claude API rejected the request: ${err.message}`, 502);
-  if (err instanceof Anthropic.APIError) return new AnalysisError(`Claude API error ${err.status}: ${err.message}`, 502);
-  return err;
+  if (!(err instanceof Anthropic.APIError)) return err;
+  console.error(`[claude] API error ${err.status}: ${err.message}`);
+  if (err instanceof Anthropic.AuthenticationError) {
+    return new AnalysisError('The analysis server is misconfigured (invalid API key in server/.env).', 500);
+  }
+  if (err instanceof Anthropic.RateLimitError) return new AnalysisError('The analysis service is busy. Try again in a moment.', 429);
+  if (err instanceof Anthropic.BadRequestError) {
+    // Includes running out of API credit.
+    return new AnalysisError('The analysis service rejected the request. See the server log for details.', 502);
+  }
+  return new AnalysisError('The analysis service is unavailable right now. Try again later.', 502);
 }
 
 /** Drops findings that point at unknown sentences or quote words that aren't in the sentence. */

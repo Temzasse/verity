@@ -1,5 +1,12 @@
-import type { AnalysisRequest, AnalysisResponse, FactCheckRequest, FactCheckResponse } from '@/utils/analysis';
-import type { ServerEndpoints, ServerPath, ServerReply, ServerRequest } from '@/utils/messages';
+import type {
+  AnalysisRequest,
+  AnalysisResponse,
+  FactCheckRequest,
+  FactCheckResponse,
+  QuickRequest,
+  QuickResponse,
+} from '@/utils/analysis';
+import type { QuickMessage, QuickReply, ServerEndpoints, ServerPath, ServerReply, ServerRequest } from '@/utils/messages';
 
 export { CATEGORIES, VERDICTS, type Category, type Finding } from '@/utils/analysis';
 
@@ -20,6 +27,16 @@ async function callServer<P extends ServerPath>(path: P, body: ServerEndpoints[P
 /** Sends the article to the analysis server. */
 export function analyze(request: AnalysisRequest): Promise<AnalysisResponse> {
   return callServer('/analyze', request);
+}
+
+/** Runs the on-device quick model (offscreen document, via the background). */
+export async function quickAnalyze(request: QuickRequest): Promise<QuickResponse> {
+  const reply = (await browser.runtime.sendMessage({ type: 'verity:quick', body: request } satisfies QuickMessage)) as
+    | QuickReply
+    | undefined;
+  if (!reply) throw new Error('No response from the extension background.');
+  if (!reply.ok) throw new Error(reply.error);
+  return reply.data;
 }
 
 /** Verifies one claim with web search. */
