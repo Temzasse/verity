@@ -3,6 +3,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { z } from 'zod';
 import {
   CATEGORY_IDS,
+  TECHNIQUES,
   type AnalysisRequest,
   type AnalysisResponse,
   type FactCheckRequest,
@@ -15,6 +16,7 @@ import { AnalysisError, MODEL, analyzeWithClaude } from './claude.ts';
 import { extractArticle, type ExtractedArticle } from './extract.ts';
 import { FACT_CHECK_PROMPT, factCheckWithClaude } from './factcheck.ts';
 import { SYSTEM_PROMPT } from './prompt.ts';
+import { VERIFIER_ENABLED, VERIFIER_VERSION, verifyFindings } from './verify.ts';
 import { addSpend, cacheKey, extractKey, factCheckKey, getCached, getStats, putCached, recordAnalysis, recordFeedback, spentToday } from './store.ts';
 
 const PORT = Number(process.env.PORT ?? 8787);
@@ -85,6 +87,7 @@ createServer(async (req, res) => {
     if (req.method === 'POST' && req.url === '/fact-check') return await handleFactCheck(req, res);
     if (req.method === 'POST' && req.url === '/extract') return await handleExtract(req, res);
     if (req.method === 'POST' && req.url === '/feedback') return await handleFeedback(req, res);
+    if (req.method === 'GET' && req.url === '/techniques') return json(res, 200, TECHNIQUES);
     if (req.method === 'GET' && req.url === '/stats') return json(res, 200, (await getStats()) satisfies StatsResponse);
     json(res, 404, { error: 'Not found' });
   } catch (err) {
@@ -93,7 +96,10 @@ createServer(async (req, res) => {
     json(res, 500, { error: 'Internal server error' });
   }
 }).listen(PORT, HOST, () => {
-  console.log(`[server] Verity analysis server on http://${HOST}:${PORT} (model ${MODEL}, budget $${DAILY_BUDGET_USD}/day)`);
+  console.log(
+    `[server] Verity analysis server on http://${HOST}:${PORT} (model ${MODEL}, budget $${DAILY_BUDGET_USD}/day, ` +
+      `confidence: ${VERIFIER_ENABLED ? VERIFIER_VERSION : 'analysis model'})`,
+  );
 });
 
 async function handleAnalyze(req: IncomingMessage, res: ServerResponse) {
@@ -103,20 +109,34 @@ async function handleAnalyze(req: IncomingMessage, res: ServerResponse) {
   const body = parsed.data;
   if (body.sentences.length === 0) return json(res, 200, { findings: [], model: MODEL, cached: false, costUsd: 0 } satisfies AnalysisResponse);
 
+  // Two cache layers: the analysis model's raw findings, and the same findings after the independent
+  // confidence check. Turning the verifier on (or changing it) re-checks cached pages without re-analyzing.
   const key = cacheKey(MODEL, PROMPT_VERSION, body);
-  const cached = await getCached<Finding[]>(key);
+  const verifiedKey = `${key}-${createHash('sha256').update(VERIFIER_VERSION).digest('hex').slice(0, 8)}`;
+  const cached = await getCached<Finding[]>(verifiedKey);
   if (cached) {
-    console.log(`[server] cache hit ${key} (${body.url})`);
+    console.log(`[server] cache hit ${verifiedKey} (${body.url})`);
     await recordAnalysis(body.sentences.length, cached.map((f) => f.category));
     return json(res, 200, { findings: cached, model: MODEL, cached: true, costUsd: 0 } satisfies AnalysisResponse);
+  }
+  const raw = await getCached<Finding[]>(key);
+  if (raw) {
+    console.log(`[server] cache hit ${key}, ${VERIFIER_ENABLED ? 'verifying' : 'no verifier'} (${body.url})`);
+    const findings = await verifyFindings(raw, body);
+    if (findings.every((f) => f.verified) || !VERIFIER_ENABLED) await putCached(verifiedKey, findings);
+    await recordAnalysis(body.sentences.length, findings.map((f) => f.category));
+    return json(res, 200, { findings, model: MODEL, cached: true, costUsd: 0 } satisfies AnalysisResponse);
   }
   if (rateLimited(req, res, 'analyze') || (await overBudget(res))) return;
 
   console.log(`[server] analyzing ${body.sentences.length} sentences: ${body.url}`);
   const started = Date.now();
-  const { findings, costUsd } = await analyzeWithClaude(body);
+  const { findings: rawFindings, costUsd } = await analyzeWithClaude(body);
   await addSpend(costUsd);
-  await putCached(key, findings);
+  await putCached(key, rawFindings);
+  const findings = await verifyFindings(rawFindings, body);
+  // Only cache the checked version when every finding was checked; otherwise retry the check next time.
+  if (findings.every((f) => f.verified) || !VERIFIER_ENABLED) await putCached(verifiedKey, findings);
   await recordAnalysis(body.sentences.length, findings.map((f) => f.category));
   console.log(`[server] ${findings.length} findings in ${Date.now() - started} ms, today $${(await spentToday()).toFixed(4)}`);
   json(res, 200, { findings, model: MODEL, cached: false, costUsd } satisfies AnalysisResponse);

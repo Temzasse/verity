@@ -50,6 +50,13 @@ The council said it would review the scheme after twelve months.`,
   },
 };
 
+// Technique definitions from the server's fixed list (GET /api/techniques), loaded once.
+let techniques = {};
+fetch('/api/techniques')
+  .then((r) => (r.ok ? r.json() : {}))
+  .then((t) => (techniques = t))
+  .catch(() => {});
+
 const form = document.querySelector('#try-form');
 if (form) initTry();
 initStats();
@@ -314,8 +321,9 @@ function fillCard(card, finding, index, state) {
   const showTechnique = finding.technique && finding.technique.toLowerCase() !== label.toLowerCase();
   const quote = finding.quote || state.sentences[finding.sentenceId].text;
   card.replaceChildren(
-    el('div', 'try-card-head', [chip(finding.category), confidence(finding.confidence)]),
+    el('div', 'try-card-head', [chip(finding.category), confidence(finding)]),
     ...(showTechnique ? [el('p', 'try-technique', finding.technique)] : []),
+    ...(techniques[finding.techniqueId] ? [el('p', 'try-technique-def', techniques[finding.techniqueId].definition)] : []),
     el('blockquote', 'try-quote', `“${quote.length > 160 ? `${quote.slice(0, 157)}…` : quote}”`),
     el('p', 'try-rationale', finding.rationale),
     ...(CHECKABLE.has(finding.category) ? [factCheckSection(card, finding, index, state)] : []),
@@ -323,10 +331,13 @@ function fillCard(card, finding, index, state) {
   );
 }
 
-function confidence(value) {
-  const pct = Math.round(value * 100);
+function confidence(finding) {
+  const pct = Math.round(finding.confidence * 100);
   const wrap = el('span', 'try-confidence', [el('span', 'try-confidence-bar'), `${pct}%`]);
-  wrap.title = `Confidence ${pct}%`;
+  wrap.title =
+    finding.verified && typeof finding.aiConfidence === 'number'
+      ? `Confidence ${pct}%, independently checked. The analysis itself estimated ${Math.round(finding.aiConfidence * 100)}%.`
+      : `Confidence ${pct}%`;
   wrap.style.setProperty('--pct', `${pct}%`);
   return wrap;
 }

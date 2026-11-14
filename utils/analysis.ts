@@ -40,11 +40,125 @@ export const CATEGORIES = {
 export type Category = keyof typeof CATEGORIES;
 export const CATEGORY_IDS = Object.keys(CATEGORIES) as [Category, ...Category[]];
 
+/**
+ * Fixed technique list. Each technique belongs to exactly one category, so a finding's category always
+ * follows from its technique. Based on the SemEval-2020 Task 11 propaganda techniques, plus claim and
+ * context techniques for the other categories. Keep ids stable: they're stored in cached results.
+ */
+export const TECHNIQUES = {
+  // Propaganda
+  'name-calling': {
+    label: 'Name calling',
+    category: 'propaganda',
+    definition: 'Labelling a person or group with a loaded term instead of engaging with what they say or do.',
+  },
+  'appeal-to-fear': {
+    label: 'Appeal to fear',
+    category: 'propaganda',
+    definition: 'Stirring up fear of harm, loss or danger to push a conclusion instead of giving evidence.',
+  },
+  'flag-waving': {
+    label: 'Flag-waving',
+    category: 'propaganda',
+    definition: 'Appealing to national, group or "ordinary people" identity to justify a position.',
+  },
+  'casting-doubt': {
+    label: 'Casting doubt',
+    category: 'propaganda',
+    definition: "Undermining someone's credibility or motives without evidence.",
+  },
+  bandwagon: {
+    label: 'Bandwagon',
+    category: 'propaganda',
+    definition: 'Claiming that everyone already believes or does something, so the reader should too.',
+  },
+  exaggeration: {
+    label: 'Exaggeration',
+    category: 'propaganda',
+    definition: 'Making something seem much bigger, worse or smaller than the facts support.',
+  },
+  slogans: {
+    label: 'Slogans and clichés',
+    category: 'propaganda',
+    definition: 'Short catchy phrases or stock lines that replace argument and discourage further thought.',
+  },
+  // Loaded language
+  'loaded-language': {
+    label: 'Loaded language',
+    category: 'loaded-language',
+    definition: 'Emotionally charged words about events or actions where neutral wording was available.',
+  },
+  // Logical fallacies
+  whataboutism: {
+    label: 'Whataboutism',
+    category: 'logical-fallacy',
+    definition: "Deflecting criticism by pointing to someone else's wrongdoing instead of answering it.",
+  },
+  'straw-man': {
+    label: 'Straw man',
+    category: 'logical-fallacy',
+    definition: "Misrepresenting an opponent's position as something weaker or more extreme, then attacking that.",
+  },
+  'false-dilemma': {
+    label: 'False dilemma',
+    category: 'logical-fallacy',
+    definition: 'Presenting only two options when more exist.',
+  },
+  'causal-oversimplification': {
+    label: 'Causal oversimplification',
+    category: 'logical-fallacy',
+    definition: 'Blaming a complex outcome on a single cause.',
+  },
+  'slippery-slope': {
+    label: 'Slippery slope',
+    category: 'logical-fallacy',
+    definition: 'Claiming one step will inevitably lead to an extreme outcome, without showing why.',
+  },
+  'red-herring': {
+    label: 'Red herring',
+    category: 'logical-fallacy',
+    definition: 'Bringing in an irrelevant point to distract from the issue.',
+  },
+  // Unsupported claims
+  'unnamed-authority': {
+    label: 'Unnamed authority',
+    category: 'unsupported-claim',
+    definition: 'Leaning on vague sources such as "experts say" or "studies show" without naming them.',
+  },
+  'unsourced-claim': {
+    label: 'Unsourced claim',
+    category: 'unsupported-claim',
+    definition: 'A specific fact, number, event or cause stated as true with no source or evidence.',
+  },
+  // Missing context
+  'cherry-picking': {
+    label: 'Cherry-picking',
+    category: 'missing-context',
+    definition: 'Choosing only the facts or figures that support a point and leaving out ones that do not.',
+  },
+  'misleading-framing': {
+    label: 'Misleading framing',
+    category: 'missing-context',
+    definition: 'Technically true, but presented without the baseline, comparison or context needed to judge it.',
+  },
+  // Misinformation
+  'false-claim': {
+    label: 'False claim',
+    category: 'misinformation',
+    definition: 'A claim that contradicts well-established, widely documented facts.',
+  },
+} as const satisfies Record<string, { label: string; category: Category; definition: string }>;
+
+export type TechniqueId = keyof typeof TECHNIQUES;
+export const TECHNIQUE_IDS = Object.keys(TECHNIQUES) as [TechniqueId, ...TechniqueId[]];
+
 export type Finding = {
   sentenceId: number;
   category: Category;
-  /** Specific technique within the category, e.g. "Appeal to fear", "Straw man". */
+  /** Display name of the technique, e.g. "Appeal to fear". */
   technique: string;
+  /** Id in TECHNIQUES (absent on results cached before the fixed list existed). */
+  techniqueId?: TechniqueId;
   /** 0–1 */
   confidence: number;
   /** Short explanation shown in the tooltip. */
@@ -53,6 +167,12 @@ export type Finding = {
   quote?: string;
   /** Who produced it: the smart (server AI) analysis, the default, or the on-device quick model. */
   source?: 'smart' | 'quick';
+  /** True when `confidence` comes from the independent verifier instead of the analysis model. */
+  verified?: boolean;
+  /** The analysis model's own confidence, kept when the verifier replaced it. */
+  aiConfidence?: number;
+  /** Individual verifier scores (0–1), e.g. combined, fair, strict, manipulative, category. */
+  checks?: Record<string, number>;
 };
 
 /** Sent to the on-device quick model (offscreen document). */

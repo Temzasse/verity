@@ -1,5 +1,5 @@
 import { env, pipeline, type FeatureExtractionPipeline } from '@huggingface/transformers';
-import type { Category, Finding, QuickRequest, QuickResponse } from '@/utils/analysis';
+import { TECHNIQUES, type Finding, type QuickRequest, type QuickResponse, type TechniqueId } from '@/utils/analysis';
 import { EXEMPLARS } from './exemplars';
 
 /**
@@ -29,7 +29,7 @@ env.useWasmCache = false;
 env.allowLocalModels = false;
 
 type Model = { extractor: FeatureExtractionPipeline; device: string; classes: ClassVectors[] };
-type ClassVectors = { technique: string; category: Category | 'neutral'; vectors: Float32Array[] };
+type ClassVectors = { technique: TechniqueId | 'neutral'; vectors: Float32Array[] };
 
 let modelPromise: Promise<Model> | undefined;
 
@@ -47,7 +47,7 @@ function loadModel(): Promise<Model> {
     }
     const classes: ClassVectors[] = [];
     for (const ex of EXEMPLARS) {
-      classes.push({ technique: ex.technique, category: ex.category, vectors: await embed(extractor, ex.examples) });
+      classes.push({ technique: ex.technique, vectors: await embed(extractor, ex.examples) });
     }
     return { extractor, device, classes };
   })();
@@ -115,27 +115,30 @@ export async function quickAnalyze({ sentences }: QuickRequest): Promise<QuickRe
     if (v) {
       for (const c of classes) {
         const score = classScore(v, c);
-        if (c.category === 'neutral') neutral = score;
+        if (c.technique === 'neutral') neutral = score;
         else if (!best || score > best.score) best = { c, score };
       }
     }
 
-    if (best && best.c.category !== 'neutral' && best.score >= MIN_SIMILARITY && best.score - neutral >= MIN_MARGIN) {
+    if (best && best.c.technique !== 'neutral' && best.score >= MIN_SIMILARITY && best.score - neutral >= MIN_MARGIN) {
       const margin = best.score - neutral;
+      const t = TECHNIQUES[best.c.technique];
       findings.push({
         sentenceId: s.id,
-        category: best.c.category,
-        technique: best.c.technique,
+        category: t.category,
+        technique: t.label,
+        techniqueId: best.c.technique,
         confidence: round(Math.min(0.9, 0.35 + margin * 3 + (lexical ? 0.1 : 0))),
-        rationale: `Reads like typical examples of ${best.c.technique.toLowerCase()}${lexical ? ` ("${lexical.quote}")` : ''}.`,
-        quote: lexical && lexical.category === best.c.category ? lexical.quote : undefined,
+        rationale: `Reads like typical examples of ${t.label.toLowerCase()}${lexical ? ` ("${lexical.quote}")` : ''}.`,
+        quote: lexical && lexical.category === t.category ? lexical.quote : undefined,
         source: 'quick',
       });
     } else if (lexical && lexical.strong) {
       findings.push({
         sentenceId: s.id,
         category: lexical.category,
-        technique: lexical.technique,
+        technique: TECHNIQUES[lexical.technique].label,
+        techniqueId: lexical.technique,
         confidence: 0.45,
         rationale: `"${lexical.quote}" is ${lexical.category === 'unsupported-claim' ? 'an unattributed-source phrase' : 'charged wording'}.`,
         quote: lexical.quote,
@@ -152,24 +155,21 @@ export async function quickAnalyze({ sentences }: QuickRequest): Promise<QuickRe
 const round = (n: number) => Math.round(n * 100) / 100;
 
 // Word list: tabloid-style charged words, labels, and unattributed-source phrases.
-const LEXICON: { category: Category; technique: string; strong: boolean; pattern: RegExp }[] = [
+const LEXICON: { technique: TechniqueId; strong: boolean; pattern: RegExp }[] = [
   {
-    category: 'loaded-language',
-    technique: 'Loaded language',
+    technique: 'loaded-language',
     strong: true,
     pattern:
       /\b(shameless|disgrace(?:ful)?|outrage(?:ous)?|sickening|horrif(?:ying|ic)|scandal(?:ous)?|barmy|bonkers|madness|fury|furious|slam(?:s|med)?|blasts?|chaos|carnage|meltdown|betrayal|betrayed|catastroph(?:e|ic)|crackdown|raid|bled dry|swarm(?:s|ing)?|flood(?:ing)? in|invasion|hordes?|onslaught|savage(?:ly)?|brutal(?:ly)?|vile|despicable|disgusting|appalling|shock(?:ing)?|terrifying|nightmare|fiasco|farce|sham|rip-?off|war on)\b/i,
   },
   {
-    category: 'propaganda',
-    technique: 'Name calling / labeling',
+    technique: 'name-calling',
     strong: true,
     pattern:
       /\b(woke|snowflakes?|loony|lefties|lefty|traitors?|eco-?(?:zealots?|loons?|mob)|zealots?|thugs?|yobs?|crooks?|cronies|elites?|do-?gooders?|luvvies|scroungers?|spongers?|militants?|extremists?|so-called experts?|mob)\b/i,
   },
   {
-    category: 'unsupported-claim',
-    technique: 'Unattributed claim',
+    technique: 'unnamed-authority',
     strong: false,
     pattern:
       /\b(experts (?:say|warn|believe|claim)|it is (?:widely )?(?:believed|feared|thought)|insiders? (?:say|claim|reveal)|sources? (?:say|claim|suggest)|studies (?:show|suggest)|many people (?:are saying|say|believe)|critics (?:say|claim)|reportedly)\b/i,
@@ -179,7 +179,7 @@ const LEXICON: { category: Category; technique: string; strong: boolean; pattern
 function matchLexicon(text: string) {
   for (const entry of LEXICON) {
     const m = entry.pattern.exec(text);
-    if (m) return { category: entry.category, technique: entry.technique, strong: entry.strong, quote: m[0] };
+    if (m) return { category: TECHNIQUES[entry.technique].category, technique: entry.technique, strong: entry.strong, quote: m[0] };
   }
   return null;
 }

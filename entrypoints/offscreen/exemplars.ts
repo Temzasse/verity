@@ -1,16 +1,16 @@
-import type { Category } from '@/utils/analysis';
+import type { TechniqueId } from '@/utils/analysis';
 
 /**
  * Few-shot examples for the on-device classifier. Each article sentence is embedded and compared
  * with these; it's flagged when it's much closer to a technique's examples than to the neutral
  * ones. Add examples (e.g. from the SemEval propaganda datasets) to improve accuracy.
  */
-export type Exemplars = { technique: string; category: Category | 'neutral'; examples: string[] };
+/** `technique` is an id from TECHNIQUES (its category follows from it), or 'neutral' for the baseline. */
+export type Exemplars = { technique: TechniqueId | 'neutral'; examples: string[] };
 
 export const EXEMPLARS: Exemplars[] = [
   {
-    technique: 'Neutral reporting',
-    category: 'neutral',
+    technique: 'neutral',
     examples: [
       'The council approved the budget on Tuesday by a vote of seven to two.',
       'The company reported revenue of 4.2 billion pounds for the third quarter.',
@@ -27,8 +27,7 @@ export const EXEMPLARS: Exemplars[] = [
     ],
   },
   {
-    technique: 'Loaded language',
-    category: 'loaded-language',
+    technique: 'loaded-language',
     examples: [
       'The shameless government has unleashed yet another disastrous assault on hardworking families.',
       'Furious locals slammed the outrageous plans as a sickening betrayal.',
@@ -39,8 +38,7 @@ export const EXEMPLARS: Exemplars[] = [
     ],
   },
   {
-    technique: 'Name calling / labeling',
-    category: 'propaganda',
+    technique: 'name-calling',
     examples: [
       'These woke snowflakes and loony lefties want to destroy everything we hold dear.',
       'The out-of-touch metropolitan elite sneer at ordinary people.',
@@ -50,8 +48,7 @@ export const EXEMPLARS: Exemplars[] = [
     ],
   },
   {
-    technique: 'Appeal to fear',
-    category: 'propaganda',
+    technique: 'appeal-to-fear',
     examples: [
       'If nothing is done, our towns will be overrun and our children will no longer be safe.',
       'Families are terrified as the threat grows closer every single day.',
@@ -61,8 +58,7 @@ export const EXEMPLARS: Exemplars[] = [
     ],
   },
   {
-    technique: 'Flag-waving',
-    category: 'propaganda',
+    technique: 'flag-waving',
     examples: [
       'Any true patriot who loves this great nation must stand against this.',
       'Britain must stand proud and refuse to bow to Brussels bureaucrats.',
@@ -71,8 +67,7 @@ export const EXEMPLARS: Exemplars[] = [
     ],
   },
   {
-    technique: 'Exaggeration',
-    category: 'propaganda',
+    technique: 'exaggeration',
     examples: [
       'This is the worst disaster in the history of the country.',
       'Absolutely everyone agrees that the scheme is a total and utter failure.',
@@ -81,8 +76,7 @@ export const EXEMPLARS: Exemplars[] = [
     ],
   },
   {
-    technique: 'Unattributed claim',
-    category: 'unsupported-claim',
+    technique: 'unnamed-authority',
     examples: [
       'Experts say the new policy will cost taxpayers billions.',
       'It is widely believed that the figures have been manipulated.',
@@ -93,8 +87,7 @@ export const EXEMPLARS: Exemplars[] = [
     ],
   },
   {
-    technique: 'Doubt / casting suspicion',
-    category: 'propaganda',
+    technique: 'casting-doubt',
     examples: [
       'Can we really trust anything the so-called scientists tell us any more?',
       'Questions are now being asked about what the minister is really hiding.',
@@ -103,8 +96,7 @@ export const EXEMPLARS: Exemplars[] = [
     ],
   },
   {
-    technique: 'False dilemma',
-    category: 'logical-fallacy',
+    technique: 'false-dilemma',
     examples: [
       'Either we close the borders completely or we lose our country forever.',
       'You are either with us or you are with the criminals.',
@@ -112,17 +104,23 @@ export const EXEMPLARS: Exemplars[] = [
     ],
   },
   {
-    technique: 'Whataboutism / straw man',
-    category: 'logical-fallacy',
+    technique: 'whataboutism',
     examples: [
       'But what about the hypocrites in the opposition who did exactly the same thing?',
-      'Campaigners want to ban cars altogether and force everyone to live in caves.',
       'Why should we listen to them when their own party has a far worse record?',
+      'Before lecturing us on spending, the minister should explain his own expenses.',
     ],
   },
   {
-    technique: 'Causal oversimplification',
-    category: 'logical-fallacy',
+    technique: 'straw-man',
+    examples: [
+      'Campaigners want to ban cars altogether and force everyone to live in caves.',
+      'Apparently anyone who questions the scheme simply wants children to breathe dirty air.',
+      'Their plan boils down to opening the borders to anyone who turns up.',
+    ],
+  },
+  {
+    technique: 'causal-oversimplification',
     examples: [
       'Crime has soared because of immigration, plain and simple.',
       'House prices have rocketed entirely because of the new arrivals.',

@@ -1,8 +1,15 @@
-import { CATEGORIES } from '../utils/analysis.ts';
+import { CATEGORIES, TECHNIQUES } from '../utils/analysis.ts';
 import type { AnalysisRequest } from '../utils/analysis.ts';
 
-const categoryList = Object.entries(CATEGORIES)
-  .map(([id, c]) => `- ${id}: ${c.description}`)
+// Techniques grouped under their category, e.g. "propaganda (Persuasion…):\n  - name-calling: Name calling. Labelling…"
+const techniqueList = Object.entries(CATEGORIES)
+  .map(([categoryId, c]) => {
+    const techniques = Object.entries(TECHNIQUES)
+      .filter(([, t]) => t.category === categoryId)
+      .map(([id, t]) => `  - ${id}: ${t.label}. ${t.definition}`)
+      .join('\n');
+    return `${c.label} (${c.description}):\n${techniques}`;
+  })
   .join('\n');
 
 // Kept byte-stable (no dates, no per-request data) so it can be prompt-cached.
@@ -10,16 +17,13 @@ export const SYSTEM_PROMPT = `You are Verity, an analyst that reviews English ne
 
 You receive the article's metadata and its sentences, each prefixed with an id like [12]. Blank lines separate paragraphs.
 
-Categories (use exactly these ids):
-${categoryList}
+Techniques (put exactly one of these ids in "technique"; each belongs to the category it is listed under):
+${techniqueList}
 
-Techniques to look for (put the most specific one in "technique"):
-- propaganda: Name calling / labeling, Repetition, Slogans, Flag-waving, Appeal to fear or prejudice, Doubt (undermining credibility without evidence), Bandwagon, Appeal to authority (irrelevant or unqualified authority), Thought-terminating cliché, Exaggeration or minimisation, Demonizing an outgroup
-- loaded-language: emotionally charged or sensational wording where neutral wording was available
-- logical-fallacy: Straw man, Whataboutism, Red herring, False dilemma (black-and-white), Causal oversimplification, Slippery slope, Ad hominem, Hasty generalization
-- unsupported-claim: a factual assertion (numbers, events, causal claims, attributions) presented as fact with no source, evidence or attribution in the text
-- missing-context: framing that is technically true but misleading: cherry-picked statistics, omitted baselines or counterpoints, misleading comparisons
-- misinformation: ONLY for claims that contradict well-established, widely documented facts or scientific consensus. If you are not certain, use unsupported-claim instead.
+Choosing a technique:
+- Pick the single most specific technique. Name calling is a label for a person or group; loaded language is charged wording about events, actions or things.
+- false-claim ONLY for claims that contradict well-established, widely documented facts or scientific consensus. If you are not certain, use unsourced-claim instead.
+- If a passage fits no listed technique, do not flag it.
 
 Rules:
 - Be precise and sparing. Flag only clear instances; a neutral, well-sourced article may have zero findings. Return at most 15 findings, the most significant first.

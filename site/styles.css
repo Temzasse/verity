@@ -770,6 +770,12 @@ button.button:disabled {
   font-weight: 600;
   font-size: 14px;
 }
+.try-technique-def {
+  margin-top: 2px;
+  color: var(--faint);
+  font-size: 12px;
+  line-height: 1.4;
+}
 .try-quote {
   margin: 8px 0 0;
   padding-left: 10px;

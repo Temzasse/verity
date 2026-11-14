@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { z } from 'zod';
-import { CATEGORY_IDS } from '../utils/analysis.ts';
+import { TECHNIQUES, TECHNIQUE_IDS } from '../utils/analysis.ts';
 import type { AnalysisRequest, Finding } from '../utils/analysis.ts';
 import { SYSTEM_PROMPT, buildUserMessage } from './prompt.ts';
 
@@ -15,8 +15,7 @@ const FindingsSchema = z.object({
   findings: z.array(
     z.object({
       sentence_id: z.number().int(),
-      category: z.enum(CATEGORY_IDS),
-      technique: z.string(),
+      technique: z.enum(TECHNIQUE_IDS),
       quote: z.string(),
       confidence: z.number(),
       rationale: z.string(),
@@ -111,13 +110,16 @@ function validateFindings(raw: z.infer<typeof FindingsSchema>['findings'], req: 
       console.warn(`[claude] dropped finding: quote not in sentence ${f.sentence_id}: "${quote}"`);
       continue;
     }
-    const key = `${f.sentence_id}:${f.category}`;
+    const technique = TECHNIQUES[f.technique];
+    if (!technique) continue;
+    const key = `${f.sentence_id}:${technique.category}`;
     if (seen.has(key)) continue;
     seen.add(key);
     out.push({
       sentenceId: f.sentence_id,
-      category: f.category,
-      technique: f.technique.trim(),
+      category: technique.category,
+      technique: technique.label,
+      techniqueId: f.technique,
       confidence: Math.min(1, Math.max(0, f.confidence)),
       rationale: f.rationale.trim(),
       quote: quote || undefined,

@@ -5,6 +5,7 @@ import { startScan, type Outcome } from './scan';
 import { playScanEffect } from './dither';
 import type { AnalysisResponse, Category, FactCheckResponse, QuickResponse } from '@/utils/analysis';
 import { CATEGORIES, VERDICTS, factCheck, sendFeedback } from './analyze';
+import { TECHNIQUES } from '@/utils/analysis';
 import { confidenceGauge } from './gauge';
 import type { PageContent } from './extract';
 import { applyHighlights, clearHighlights, setActiveHighlight, type PlacedFinding } from './highlight';
@@ -258,9 +259,15 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
       el('div', 'tooltip-head', [
         chip(finding.category),
         ...(finding.source === 'quick' ? [el('span', 'tag', 'Quick')] : []),
-        confidenceGauge(finding.confidence),
+        confidenceGauge(
+          finding.confidence,
+          finding.verified && finding.aiConfidence !== undefined
+            ? `Independently checked. The analysis itself estimated ${Math.round(finding.aiConfidence * 100)}%.`
+            : undefined,
+        ),
       ]),
       ...(showTechnique(finding) ? [el('p', 'technique', finding.technique)] : []),
+      ...(finding.techniqueId ? [el('p', 'technique-def', TECHNIQUES[finding.techniqueId].definition)] : []),
       el('p', 'rationale', finding.rationale),
       ...(CHECKABLE.has(finding.category) ? [renderFactCheck(finding)] : []),
       renderFeedback(finding),

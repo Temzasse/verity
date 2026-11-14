@@ -752,3 +752,11 @@ h1 {
   border-radius: 10px;
   font-size: 12px;
 }
+
+/* One-line definition of the technique, under its name in the tooltip */
+.tooltip .technique-def {
+  margin: 0 0 8px !important;
+  color: var(--v-faint);
+  font-size: 12px;
+  line-height: 1.4;
+}

@@ -23,14 +23,15 @@ export function confidenceLevel(confidence: number): 'Low' | 'Medium' | 'High' {
   return confidence < 0.5 ? 'Low' : confidence < 0.75 ? 'Medium' : 'High';
 }
 
-export function confidenceGauge(confidence: number): HTMLElement {
+/** `detail` is appended to the hover text (e.g. where the confidence came from). */
+export function confidenceGauge(confidence: number, detail?: string): HTMLElement {
   const c = Math.min(1, Math.max(0, confidence));
   const level = confidenceLevel(c);
   const wrap = document.createElement('span');
   wrap.className = 'gauge';
   wrap.setAttribute('role', 'img');
   wrap.setAttribute('aria-label', `${level} confidence (${Math.round(c * 100)}%)`);
-  wrap.title = `${level} confidence (${Math.round(c * 100)}%)`;
+  wrap.title = `${level} confidence (${Math.round(c * 100)}%)${detail ? `\n${detail}` : ''}`;
 
   // Drawn in a 48×28 coordinate space, displayed smaller.
   const svg = svgEl('svg', { width: W * DISPLAY_SCALE, height: H * DISPLAY_SCALE, viewBox: `0 0 ${W} ${H}`, 'aria-hidden': 'true' });
