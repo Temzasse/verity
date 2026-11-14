@@ -67,6 +67,8 @@ function css(active: Category | null) {
       text-underline-offset: 3px;
     }`,
   );
+  // Pointer cursor while hovering a highlight (toggled from the content script).
+  rules.push(`html[data-verity-hover], html[data-verity-hover] * { cursor: pointer !important; }`);
   if (active) {
     const { color } = CATEGORIES[active];
     rules.push(`::highlight(${ACTIVE}) { background-color: color-mix(in srgb, ${color} 50%, transparent); color: inherit; }`);

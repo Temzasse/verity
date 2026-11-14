@@ -54,6 +54,7 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
   let canvas!: HTMLCanvasElement;
   let tooltip!: HTMLElement;
   let active: PlacedFinding | null = null;
+  let placed: PlacedFinding[] = [];
 
   const ui = await createShadowRootUi(ctx, {
     name: 'verity-overlay',
@@ -89,7 +90,9 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
       window.removeEventListener('scroll', positionTooltip, true);
       window.removeEventListener('resize', positionTooltip);
       document.removeEventListener('pointerdown', onPagePointerDown, true);
+      document.removeEventListener('pointermove', onPagePointerMove, true);
       document.removeEventListener('keydown', onKeyDown, true);
+      setHoverCursor(false);
       onClose();
     },
   });
@@ -112,12 +115,14 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
     tooltip.style.setProperty('--arrow-x', `${Math.min(Math.max(12, rect.left + 12 - left), tw - 12)}px`);
   }
 
-  function showFinding(finding: PlacedFinding | null) {
+  function showFinding(finding: PlacedFinding | null, { scroll = true } = {}) {
     active = finding;
     setActiveHighlight(finding);
-    body.querySelectorAll('.finding').forEach((el) =>
-      el.classList.toggle('active', !!finding && el.getAttribute('data-sentence') === String(finding.sentenceId)),
-    );
+    body.querySelectorAll('.finding').forEach((item) => {
+      const isActive = !!finding && item.getAttribute('data-sentence') === String(finding.sentenceId);
+      item.classList.toggle('active', isActive);
+      if (isActive) item.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    });
     if (!finding) {
       tooltip.hidden = true;
       return;
@@ -132,14 +137,47 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
     );
     tooltip.style.setProperty('--cat', meta.color);
     tooltip.hidden = false;
-    // Center the passage in the viewport; the tooltip tracks it during the smooth scroll.
-    const rect = finding.range.getBoundingClientRect();
-    window.scrollBy({ top: rect.top - window.innerHeight * 0.4, behavior: 'smooth' });
+    if (scroll) {
+      // Center the passage in the viewport; the tooltip tracks it during the smooth scroll.
+      const rect = finding.range.getBoundingClientRect();
+      window.scrollBy({ top: rect.top - window.innerHeight * 0.4, behavior: 'smooth' });
+    }
     positionTooltip();
   }
 
+  /** The finding whose highlighted text is under the given viewport point, if any. */
+  function findingAt(x: number, y: number): PlacedFinding | null {
+    for (const f of placed) {
+      for (const r of f.range.getClientRects()) {
+        if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return f;
+      }
+    }
+    return null;
+  }
+
+  // Clicking highlighted text on the page opens its tooltip; clicking elsewhere closes it.
+  // Links inside highlights still navigate as usual.
   function onPagePointerDown(e: PointerEvent) {
-    if (active && !e.composedPath().includes(ui.shadowHost)) showFinding(null);
+    if (e.composedPath().includes(ui.shadowHost)) return;
+    const hit = e.button === 0 ? findingAt(e.clientX, e.clientY) : null;
+    if (hit) showFinding(hit, { scroll: false });
+    else if (active) showFinding(null);
+  }
+
+  // Highlights aren't elements, so show a pointer cursor over them manually.
+  let moveQueued = false;
+  function onPagePointerMove(e: PointerEvent) {
+    if (moveQueued || !placed.length) return;
+    moveQueued = true;
+    requestAnimationFrame(() => {
+      moveQueued = false;
+      setHoverCursor(!!findingAt(e.clientX, e.clientY));
+    });
+  }
+  function setHoverCursor(on: boolean) {
+    const root = document.documentElement;
+    if (on) root.setAttribute('data-verity-hover', '');
+    else root.removeAttribute('data-verity-hover');
   }
   function onKeyDown(e: KeyboardEvent) {
     if (e.key === 'Escape' && active) showFinding(null);
@@ -147,10 +185,11 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
   window.addEventListener('scroll', positionTooltip, { capture: true, passive: true });
   window.addEventListener('resize', positionTooltip);
   document.addEventListener('pointerdown', onPagePointerDown, true);
+  document.addEventListener('pointermove', onPagePointerMove, { capture: true, passive: true });
   document.addEventListener('keydown', onKeyDown, true);
 
   function renderResult({ content, findings }: ScanResult) {
-    const placed = applyHighlights(findings, content.sentences);
+    placed = applyHighlights(findings, content.sentences);
     const list = el('ol', 'findings');
     for (const f of placed) {
       const button = el('button', 'finding', [
@@ -200,6 +239,7 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
 
       showFinding(null);
       clearHighlights();
+      placed = [];
       raise();
       body.innerHTML = `<p class="muted">Scanning page…</p>`;
 
