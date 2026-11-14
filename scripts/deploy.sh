@@ -20,10 +20,13 @@ fi
 bash scripts/release.sh "$VERITY_DOMAIN"
 
 # 2. Copy what the stack needs (sources, site, Caddy config, secrets) to the VPS
-ssh "$VPS_HOST" "mkdir -p '$VPS_DIR'"
-rsync -azR --delete --exclude 'server/.cache' \
-  server/ utils/analysis.ts site/ deploy/ docker-compose.yml \
-  "$VPS_HOST:$VPS_DIR/"
+ssh "$VPS_HOST" "mkdir -p '$VPS_DIR/utils'"
+# One rsync per folder: macOS's openrsync doesn't apply --delete with -R, so removed files would linger.
+for dir in server site deploy; do
+  rsync -az --delete --exclude '.cache' "$dir/" "$VPS_HOST:$VPS_DIR/$dir/"
+done
+rsync -az utils/analysis.ts "$VPS_HOST:$VPS_DIR/utils/"
+rsync -az docker-compose.yml "$VPS_HOST:$VPS_DIR/"
 ssh "$VPS_HOST" "printf 'VERITY_DOMAIN=%s\nVERITY_ALIASES=%s\n' '$VERITY_DOMAIN' '${VERITY_ALIASES:-}' > '$VPS_DIR/.env' && chmod 600 '$VPS_DIR/server/.env'"
 
 # 3. Build and (re)start the containers

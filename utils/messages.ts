@@ -3,6 +3,7 @@ import type {
   AnalysisResponse,
   FactCheckRequest,
   FactCheckResponse,
+  FeedbackRequest,
   QuickRequest,
   QuickResponse,
 } from './analysis';
@@ -17,6 +18,7 @@ export type CaptureRequest = { type: 'verity:capture' };
 export type ServerEndpoints = {
   '/analyze': { request: AnalysisRequest; response: AnalysisResponse };
   '/fact-check': { request: FactCheckRequest; response: FactCheckResponse };
+  '/feedback': { request: FeedbackRequest; response: { ok: true } };
 };
 export type ServerPath = keyof ServerEndpoints;
 

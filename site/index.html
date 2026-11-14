@@ -22,6 +22,7 @@
           <span>Verity</span>
         </a>
         <nav class="nav-links" aria-label="Sections">
+          <a href="#try">Try it</a>
           <a href="#how">How it works</a>
           <a href="#detects">What it detects</a>
           <a href="#honest">Accuracy</a>
@@ -65,6 +66,36 @@
               <span class="placeholder-label">Hero video</span>
               <span class="placeholder-hint">16:10 · assets/hero.mp4</span>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Try it -->
+      <section class="section" id="try">
+        <div class="wrap">
+          <p class="section-eyebrow">Try it</p>
+          <h2>Check an article right here.</h2>
+          <p class="section-lede">
+            Paste a link or the text of a news article or blog post. This runs the same Smart analysis as the extension; the extension also adds
+            instant Quick findings and highlights straight on the page.
+          </p>
+          <div class="card try">
+            <div class="try-tabs" role="tablist" aria-label="Input type">
+              <button type="button" role="tab" data-try-mode="url" aria-selected="true">Article link</button>
+              <button type="button" role="tab" data-try-mode="text" aria-selected="false">Paste text</button>
+            </div>
+            <form id="try-form" class="try-form">
+              <input id="try-url" type="url" placeholder="https://www.example.com/news/article" aria-label="Article link" required />
+              <textarea id="try-text" rows="7" maxlength="30000" placeholder="Paste the article text here…" aria-label="Article text" hidden></textarea>
+              <button class="button button-primary" type="submit">Analyze</button>
+            </form>
+            <div class="try-examples">
+              <span>Or try an example:</span>
+              <button type="button" class="try-example" data-example="opinion">Loaded opinion column</button>
+              <button type="button" class="try-example" data-example="neutral">Neutral news report</button>
+            </div>
+            <p id="try-status" class="try-status" aria-live="polite" hidden></p>
+            <div id="try-result" class="try-result" hidden></div>
           </div>
         </div>
       </section>
@@ -183,6 +214,20 @@
             </div>
             <span class="badge">Results coming soon</span>
           </div>
+          <div class="card live-stats" id="live-stats">
+            <div class="live-stats-head">
+              <h3>Live from the server</h3>
+              <span class="live-dot" aria-hidden="true"></span>
+            </div>
+            <dl class="stat-grid">
+              <div><dt>Scans</dt><dd data-stat="analyses">–</dd></div>
+              <div><dt>Sentences read</dt><dd data-stat="sentences">–</dd></div>
+              <div><dt>Passages flagged</dt><dd data-stat="findings">–</dd></div>
+              <div><dt>Reader votes</dt><dd data-stat="votes">–</dd></div>
+              <div><dt>Flags readers marked wrong</dt><dd data-stat="false-flags">–</dd></div>
+            </dl>
+            <p class="live-note" data-stat-note>Loading…</p>
+          </div>
         </div>
       </section>
 
@@ -251,6 +296,7 @@
       </div>
     </footer>
 
+    <script src="try.js" defer></script>
     <script>
       // Footer API status: a live check against the analysis server.
       (async () => {

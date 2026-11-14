@@ -3,6 +3,7 @@ import type {
   AnalysisResponse,
   FactCheckRequest,
   FactCheckResponse,
+  FeedbackRequest,
   QuickRequest,
   QuickResponse,
 } from '@/utils/analysis';
@@ -42,4 +43,9 @@ export async function quickAnalyze(request: QuickRequest): Promise<QuickResponse
 /** Verifies one claim with web search. */
 export function factCheck(request: FactCheckRequest): Promise<FactCheckResponse> {
   return callServer('/fact-check', request);
+}
+
+/** Records a reader's verdict on a finding (feeds the live false-positive numbers on the website). */
+export async function sendFeedback(request: FeedbackRequest): Promise<void> {
+  await callServer('/feedback', request);
 }

@@ -4,7 +4,7 @@ import { CAPTURE_MESSAGE, type VerityMessage } from '@/utils/messages';
 import { startScan, type Outcome } from './scan';
 import { playScanEffect } from './dither';
 import type { AnalysisResponse, Category, FactCheckResponse, QuickResponse } from '@/utils/analysis';
-import { CATEGORIES, VERDICTS, factCheck } from './analyze';
+import { CATEGORIES, VERDICTS, factCheck, sendFeedback } from './analyze';
 import { confidenceGauge } from './gauge';
 import type { PageContent } from './extract';
 import { applyHighlights, clearHighlights, setActiveHighlight, type PlacedFinding } from './highlight';
@@ -18,6 +18,9 @@ type ViewState = {
   quick: Outcome<QuickResponse> | null;
   smart: Outcome<AnalysisResponse> | null;
 };
+
+/** A reader's vote on one finding: in flight, recorded, or failed (buttons shown again with the error). */
+type VoteState = { vote: 'agree' | 'disagree'; status: 'sending' | 'sent' } | { status: 'error'; error: string };
 
 type FactCheckState =
   | { status: 'loading' }
@@ -77,6 +80,7 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
   let placed: PlacedFinding[] = [];
   let article: PageContent | null = null;
   const factChecks = new Map<string, FactCheckState>();
+  const votes = new Map<string, VoteState>();
 
   const ui = await createShadowRootUi(ctx, {
     name: 'verity-overlay',
@@ -164,26 +168,33 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
     setTimeout(finish, 1200); // fallback if no scrollend fires (e.g. the scroll was interrupted)
   }
 
+  /** The spotlight box (the finding's paragraph plus padding) in viewport coordinates. */
+  function spotlightBox(finding: PlacedFinding) {
+    // Measured every time (cheap), so it follows scrolling and layout shifts from lazy-loaded ads.
+    const range = finding.range.getBoundingClientRect();
+    const block = paragraphOf(finding.range)?.getBoundingClientRect();
+    const r = block && block.width > 0 && block.height > 0 ? block : range;
+    const pad = 10;
+    return {
+      left: Math.min(r.left, range.left) - pad,
+      top: Math.min(r.top, range.top) - pad,
+      right: Math.max(r.right, range.right) + pad,
+      bottom: Math.max(r.bottom, range.bottom) + pad,
+    };
+  }
+
   /** Spotlights the finding's paragraph and dims the rest of the page while its tooltip is open. */
   function positionFocus() {
     if (!active || !focusReady) {
       focus.hidden = true;
       return;
     }
-    // Measured every time (cheap), so it follows scrolling and layout shifts from lazy-loaded ads.
-    const range = active.range.getBoundingClientRect();
-    const block = paragraphOf(active.range)?.getBoundingClientRect();
-    const r = block && block.width > 0 && block.height > 0 ? block : range;
-    const left = Math.min(r.left, range.left);
-    const top = Math.min(r.top, range.top);
-    const right = Math.max(r.right, range.right);
-    const bottom = Math.max(r.bottom, range.bottom);
-    const pad = 10;
+    const box = spotlightBox(active);
     focus.hidden = false;
-    focus.style.left = `${left - pad}px`;
-    focus.style.top = `${top - pad}px`;
-    focus.style.width = `${right - left + pad * 2}px`;
-    focus.style.height = `${bottom - top + pad * 2}px`;
+    focus.style.left = `${box.left}px`;
+    focus.style.top = `${box.top}px`;
+    focus.style.width = `${box.right - box.left}px`;
+    focus.style.height = `${box.bottom - box.top}px`;
   }
 
   function onResize() {
@@ -199,10 +210,26 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
     if (!rect || (rect.width === 0 && rect.height === 0)) return;
     const tw = tooltip.offsetWidth;
     const th = tooltip.offsetHeight;
-    const below = rect.top - th - 10 < 8;
-    const left = Math.min(Math.max(8, rect.left + Math.min(rect.width, 240) / 2 - tw / 2), window.innerWidth - tw - 8);
+    const gap = 10;
+    const margin = 8;
+    // Sit outside the spotlit paragraph so the reader always sees the whole passage: above it if
+    // there's room, else below it, else (paragraph taller than the viewport) next to the highlight.
+    const box = spotlightBox(active);
+    let below: boolean;
+    let top: number;
+    if (box.top - gap - th >= margin) {
+      below = false;
+      top = box.top - gap - th;
+    } else if (box.bottom + gap + th <= window.innerHeight - margin) {
+      below = true;
+      top = box.bottom + gap;
+    } else {
+      below = rect.top - th - gap < margin;
+      top = below ? rect.bottom + gap : rect.top - th - gap;
+    }
+    const left = Math.min(Math.max(margin, rect.left + Math.min(rect.width, 240) / 2 - tw / 2), window.innerWidth - tw - margin);
     tooltip.style.left = `${left}px`;
-    tooltip.style.top = `${below ? rect.bottom + 10 : rect.top - th - 10}px`;
+    tooltip.style.top = `${top}px`;
     tooltip.classList.toggle('below', below);
     tooltip.style.setProperty('--arrow-x', `${Math.min(Math.max(12, rect.left + 12 - left), tw - 12)}px`);
   }
@@ -233,6 +260,7 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
       ...(showTechnique(finding) ? [el('p', 'technique', finding.technique)] : []),
       el('p', 'rationale', finding.rationale),
       ...(CHECKABLE.has(finding.category) ? [renderFactCheck(finding)] : []),
+      renderFeedback(finding),
     );
     tooltip.style.setProperty('--cat', meta.color);
     tooltip.hidden = false;
@@ -296,6 +324,55 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
       }
     }
     return section;
+  }
+
+  /** "Is this flag right?" row: reader votes feed the live false-positive rate shown on the website. */
+  function renderFeedback(finding: PlacedFinding): HTMLElement {
+    const state = votes.get(findingKey(finding));
+    const row = el('div', 'feedback');
+    if (state && state.status !== 'error') {
+      row.append(
+        el(
+          'p',
+          'feedback-thanks',
+          state.status === 'sending' ? 'Sending…' : state.vote === 'agree' ? 'Thanks! Marked as a fair flag.' : 'Thanks! Marked as a false flag.',
+        ),
+      );
+      return row;
+    }
+    const button = (vote: 'agree' | 'disagree', label: string) => {
+      const b = el('button', 'vote-button', label);
+      b.type = 'button';
+      b.addEventListener('click', () => void castVote(finding, vote));
+      return b;
+    };
+    row.append(el('span', 'feedback-label', 'Is this flag right?'), button('agree', 'Yes'), button('disagree', 'No'));
+    if (state?.status === 'error') row.append(el('p', 'error', state.error));
+    return row;
+  }
+
+  async function castVote(finding: PlacedFinding, vote: 'agree' | 'disagree') {
+    const key = findingKey(finding);
+    if (!article) return;
+    votes.set(key, { vote, status: 'sending' });
+    refreshFinding(finding);
+    try {
+      await sendFeedback({
+        vote,
+        url: article.url,
+        sentence: finding.sentence.text,
+        ...(finding.quote ? { quote: finding.quote } : {}),
+        category: finding.category,
+        technique: finding.technique,
+        confidence: finding.confidence,
+        source: finding.source ?? 'smart',
+        client: 'extension',
+      });
+      votes.set(key, { vote, status: 'sent' });
+    } catch (err) {
+      votes.set(key, { status: 'error', error: err instanceof Error ? err.message : String(err) });
+    }
+    refreshFinding(finding);
   }
 
   async function runFactCheck(finding: PlacedFinding) {
@@ -499,6 +576,7 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
       placed = [];
       article = null;
       factChecks.clear();
+      votes.clear();
       raise();
       body.replaceChildren(el('p', 'status', 'Scanning page…'));
 

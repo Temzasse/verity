@@ -114,3 +114,26 @@ export type FactCheckResponse = {
   costUsd: number;
   searches: number;
 };
+
+/** Sent to POST /feedback when a reader rates a finding. */
+export type FeedbackRequest = {
+  vote: 'agree' | 'disagree';
+  url: string;
+  sentence: string;
+  quote?: string;
+  category: Category;
+  technique: string;
+  confidence: number;
+  source: 'smart' | 'quick';
+  client: 'extension' | 'web';
+};
+
+/** Returned by GET /stats: usage and reader feedback since the server's stats started. */
+export type StatsResponse = {
+  analyses: number;
+  sentences: number;
+  findings: number;
+  findingsByCategory: Record<string, number>;
+  feedback: { agree: number; disagree: number; byCategory: Record<string, { agree: number; disagree: number }> };
+  since: string;
+};

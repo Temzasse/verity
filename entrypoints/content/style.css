@@ -579,3 +579,50 @@ h1 {
     transform: rotate(360deg);
   }
 }
+
+/* Reader feedback row at the bottom of the tooltip */
+.feedback {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--v-border);
+}
+.feedback-label {
+  margin-right: auto;
+  color: var(--v-muted);
+  font-size: 12px;
+}
+.vote-button {
+  all: unset;
+  box-sizing: border-box;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--v-tile);
+  color: var(--v-fg);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 120ms;
+}
+.vote-button:hover {
+  background: rgb(0 0 0 / 0.09);
+}
+.vote-button:focus-visible {
+  outline: 2px solid var(--v-accent);
+  outline-offset: 2px;
+}
+.feedback-thanks {
+  margin: 0 !important;
+  color: var(--v-muted);
+  font-size: 12px;
+}
+.feedback .error {
+  flex-basis: 100%;
+  margin: 2px 0 0 !important;
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+}

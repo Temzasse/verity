@@ -40,6 +40,8 @@ It listens on `http://127.0.0.1:8787`, restarts on file changes, and logs tokens
 - **Cache:** results are stored in `server/.cache/` per URL + article text + prompt version, so re-scanning a page is free. Delete the folder to force fresh analysis.
 - **Budget:** `DAILY_BUDGET_USD` (default $1) stops Claude calls for the day once reached. `GET /health` shows today's spend.
 - **Prompt:** `server/prompt.ts`. Editing it invalidates cached results automatically.
+- **Scraping ("Try it" links):** `SCRAPER` in `server/.env` picks how `/extract` fetches pages: `contextdev` (default, [Context.dev](https://www.context.dev/) scrape API, needs `CONTEXT_DEV_API_KEY`) or `direct` (fetched from the server itself). A failed Context.dev scrape or a missing key falls back to `direct`.
+- **Other endpoints:** `POST /extract` fetches an article by URL for the landing page's "Try it" demo (blocks private addresses, follows redirects by hand), `POST /feedback` records a reader's vote on a finding (raw votes in `server/.cache/feedback.jsonl`), and `GET /stats` returns scan counts and the reader-reported false-flag rate shown on the landing page.
 
 ## Quick findings (on-device model)
 

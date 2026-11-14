@@ -27,6 +27,7 @@
     "@anthropic-ai/sdk": "^1.8.0",
     "@huggingface/transformers": "4.3.2",
     "@mozilla/readability": "^0.6.0",
+    "linkedom": "^0.18.15",
     "zod": "^4.6.7"
   }
 }
