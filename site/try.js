@@ -478,7 +478,7 @@ function factCheckSection(card, finding, index, state) {
   const section = el('div', 'try-check');
   if (!check || check.status === 'error') {
     if (check) section.append(el('p', 'try-error', check.error));
-    const b = el('button', 'button button-secondary try-check-button', check ? 'Retry fact-check' : 'Check with web sources');
+    const b = el('button', 'button button-primary try-check-button', check ? 'Retry fact-check' : 'Check with web sources');
     b.type = 'button';
     b.addEventListener('click', async () => {
       state.checks.set(index, { status: 'loading' });
