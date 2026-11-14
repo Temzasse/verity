@@ -15,9 +15,25 @@
   margin: 0 0 8px;
   font-size: 14px;
   font-weight: 600;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
 }
 .claim-results .claim-summary {
   margin: 8px 0;
+  font-size: 13px;
+  color: var(--v-fg, var(--ink));
+}
+.claim-results .claim-summary-preview {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+.claim-results .claim-full-text,
+.claim-results .claim-explanation {
+  margin: 4px 0 10px;
   font-size: 13px;
   color: var(--v-muted, var(--muted));
 }
@@ -51,13 +67,31 @@
   color: var(--v-muted, var(--muted));
   font-size: 12px;
 }
-.claim-results .claim-reviews {
-  margin-top: 10px;
+.claim-results .claim-details {
+  margin-top: 8px;
   font-size: 13px;
 }
-.claim-results .claim-reviews > summary {
+.claim-results .claim-details > summary,
+.finding-details > summary {
   cursor: pointer;
-  font-weight: 600;
+  color: var(--v-muted, var(--muted));
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 0;
+}
+.claim-results .claim-details > summary:focus-visible,
+.finding-details > summary:focus-visible {
+  outline: 2px solid var(--v-accent, var(--accent));
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+.finding-details {
+  margin-top: 10px;
+  padding-top: 6px;
+  border-top: 1px solid var(--v-line, var(--line, #ddd));
+}
+.finding-details[open] > summary {
+  margin-bottom: 8px;
 }
 .claim-results .claim-review {
   padding: 8px 0;

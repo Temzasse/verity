@@ -32,6 +32,10 @@ Extend the current **Check with web sources** flow in both the extension and web
 
 Check dates, definitions, and relevance before treating sources as contradictory. If credible, applicable sources still disagree, return **Mixed evidence**, explain the disagreement, and link to evidence on both sides. Do not decide the verdict by counting sources supporting each side.
 
+## Result presentation
+
+Lead with the verdict and a short takeaway that preserves material uncertainty and attribution. Keep the complete claim, assessment, evidence excerpts and publisher reviews under **Details**, with the source count visible before expansion. Multiple claims retain separate results. Move the original finding explanation under **Why flagged** after checking; keep the incoming reader relevance voting controls visible and omit confidence scores from the UI; do not repeat the initial flag definition above the factual result. Before checking, keep the finding explanation visible and place the generic definition under **About this flag**.
+
 ## Operational limits
 
 Check up to eight independently verifiable claims per request, with at most three web searches and three published review candidates per claim. Requests exceeding the claim limit return an explicit error rather than silently omitting assertions. Reuse review article reads within the same request, and keep results for six hours. Do not cache transient review-search or article-reading failures. Account for model usage after each turn, including turns preceding a failed check, and enforce the configured daily budget between turns.

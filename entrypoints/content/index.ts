@@ -116,6 +116,7 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
       body = container.querySelector('.body')!;
       sweep = container.querySelector('.sweep')!;
       tooltip = container.querySelector('.tooltip')!;
+      tooltip.addEventListener('toggle', positionTooltip, true);
       focus = container.querySelector('.focus')!;
       canvas = container.querySelector('.dither')!;
       container.querySelector('.close')!.addEventListener('click', () => {
@@ -260,7 +261,8 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
     }
     if (maxHeight !== null) tooltip.style.maxHeight = `${maxHeight}px`;
     tooltip.style.left = `${left}px`;
-    tooltip.style.top = `${top}px`;
+    const positionedHeight = Math.min(th, maxHeight ?? th);
+    tooltip.style.top = `${Math.min(Math.max(margin, top), Math.max(margin, vh - positionedHeight - margin))}px`;
     tooltip.classList.toggle('below', place === 'below');
     tooltip.classList.toggle('side', place === 'side');
     tooltip.classList.toggle('capped', maxHeight !== null);
@@ -284,17 +286,29 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
       return;
     }
     const meta = CATEGORIES[finding.category];
-    tooltip.replaceChildren(
-      el('div', 'tooltip-head', [
-        chip(finding.category),
-        ...(finding.source === 'quick' ? [el('span', 'tag', 'Quick')] : []),
-      ]),
-      ...(showTechnique(finding) ? [el('p', 'technique', finding.technique)] : []),
+    const checked = factChecks.get(findingKey(finding))?.status === 'done';
+    const head = el('div', 'tooltip-head', [
+      chip(finding.category),
+      ...(finding.source === 'quick' ? [el('span', 'tag', 'Quick')] : []),
+    ]);
+    const about = el('details', 'finding-details');
+    about.append(
+      el('summary', null, checked ? 'Why flagged' : 'About this flag'),
+      ...(checked ? [head] : []),
+      ...(checked && showTechnique(finding) ? [el('p', 'technique', finding.technique)] : []),
       ...(finding.techniqueId ? [el('p', 'technique-def', TECHNIQUES[finding.techniqueId].definition)] : []),
-      el('p', 'rationale', finding.rationale),
-      ...(CHECKABLE.has(finding.category) ? [renderFactCheck(finding)] : []),
-      renderFeedback(finding),
+      ...(checked ? [el('p', 'rationale', finding.rationale)] : []),
     );
+    tooltip.classList.toggle('has-assessment', checked);
+    tooltip.replaceChildren(...(checked
+      ? [renderFactCheck(finding), about, renderFeedback(finding)]
+      : [head,
+        ...(showTechnique(finding) ? [el('p', 'technique', finding.technique)] : []),
+        el('p', 'rationale', finding.rationale),
+        ...(CHECKABLE.has(finding.category) ? [renderFactCheck(finding)] : []),
+        ...(finding.techniqueId ? [about] : []),
+        renderFeedback(finding),
+      ]));
     tooltip.style.setProperty('--cat', meta.color);
     tooltip.hidden = false;
     let willScroll = false;

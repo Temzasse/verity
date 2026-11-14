@@ -61,7 +61,7 @@ Each scan also runs a small model in the browser, so first results show up befor
 The landing page (`site/`) and the analysis server run on one VPS with Docker Compose: Caddy serves the page with automatic HTTPS and proxies `/api/*` to the server.
 
 1. In `.env` set `VERITY_DOMAIN` (domain whose A record points at the VPS) and `VPS_HOST` (e.g. `root@203.0.113.10`). Optional `VERITY_ALIASES="www.example.com other.host"` serves extra hostnames too (quote it: the file is sourced by bash).
-2. Make sure `server/.env` has the production API key and budget (it is copied to the VPS).
+2. Add production variables in **Hostinger → VPS → Docker Manager → your project → Environment variables**: `ANTHROPIC_API_KEY`, `GOOGLE_FACT_CHECK_API_KEY`, `CONTEXT_DEV_API_KEY`, `TYPESAFE_API_KEY`, and the budget/settings you use. These names match `server/.env.example`. Compose explicitly passes these project variables to the server container. Use the updated `docker-compose.yml` in the project's YAML editor, then **Save and deploy**. Local development continues using the local `server/.env`.
 3. Deploy:
 
 ```bash
@@ -70,9 +70,11 @@ pnpm deploy:vps
 
 This builds the extension zip for `https://<domain>/api` (`pnpm release`), copies the stack to `/opt/verity` over SSH and runs `docker compose up -d --build`. Re-run it to ship updates.
 
-- Try the stack locally: `pnpm release example.test && VERITY_DOMAIN=:80 docker compose up --build`, then open http://localhost.
+The deploy script preserves remote environment files and does not upload local API keys. Existing `server/.env` files remain a fallback for scripted deployments, with Docker Manager's `.env` taking precedence. If Docker Manager stores your project somewhere else, set `VPS_DIR` in your local `.env` to that project's directory. Configure production keys in Docker Manager before the first deployment.
+
+- Try the stack locally: `pnpm release example.test && VERITY_DOMAIN=:80 docker compose --env-file server/.env up --build`, then open http://localhost.
 - Hero video: put the clip in `site/assets/hero.mp4` and swap the placeholder in `site/index.html` (instructions in the comment there).
-- To use Hostinger's AI Router instead of Anthropic directly, set `ANTHROPIC_BASE_URL`, `ANTHROPIC_API_KEY` and `VERITY_MODEL` in `server/.env`.
+- To use Hostinger's AI Router instead of Anthropic directly, set `ANTHROPIC_BASE_URL`, `ANTHROPIC_API_KEY` and `VERITY_MODEL` in Docker Manager's environment settings (or `server/.env` for local development).
 
 ## Project layout
 

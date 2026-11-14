@@ -853,6 +853,9 @@ button.button:disabled {
   gap: 8px;
   margin-top: 12px;
 }
+.try-card > .try-check:first-child {
+  margin-top: 0;
+}
 .try-check-button {
   height: 36px;
   padding: 0 14px;

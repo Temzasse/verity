@@ -146,7 +146,7 @@ export const TECHNIQUES = {
     // Retain the stored id for compatibility; the initial scan does not establish falsity.
     label: 'Claim to check',
     category: 'misinformation',
-    definition: 'A specific factual assertion that warrants verification against external sources. This flag does not establish that it is false.',
+    definition: 'A factual claim worth checking.',
   },
 } as const satisfies Record<string, { label: string; category: Category; definition: string }>;
 
@@ -245,6 +245,8 @@ export type PublishedClaimReview = {
 export type ClaimAssessment = {
   claim: string;
   verdict: Verdict;
+  /** Short reader-facing conclusion; older cached results may only have summary. */
+  takeaway?: string;
   summary: string;
   sources: FactCheckSource[];
   reviews: PublishedClaimReview[];

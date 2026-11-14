@@ -23,15 +23,15 @@ const FindingsSchema = z.object({
   ),
 });
 
-// Uses only ANTHROPIC_API_KEY from server/.env (loaded by `pnpm server`), never other credentials
-// that may exist on the machine, so the hackathon key is the one that gets billed.
+// Reads ANTHROPIC_API_KEY from the server runtime environment. Local development loads
+// server/.env; Docker Manager supplies the production environment.
 // ANTHROPIC_BASE_URL optionally points the SDK at an Anthropic-compatible router (e.g. Hostinger AI Router).
 let client: Anthropic | undefined;
 export function getClient(): Anthropic {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    console.error('[claude] ANTHROPIC_API_KEY is not set. Add it to server/.env and restart `pnpm server`.');
-    throw new AnalysisError('The analysis server is missing its API key (server/.env).', 500);
+    console.error('[claude] ANTHROPIC_API_KEY is not set in the server environment.');
+    throw new AnalysisError('The analysis server is missing its API key. Configure ANTHROPIC_API_KEY in the server environment.', 500);
   }
   client ??= new Anthropic({ apiKey, ...(process.env.ANTHROPIC_BASE_URL ? { baseURL: process.env.ANTHROPIC_BASE_URL } : {}) });
   return client;

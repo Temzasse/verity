@@ -11,6 +11,7 @@ const SEARCH_PRICE_USD = 0.01;
 const ClaimsSchema = z.object({ claims: z.array(z.string().min(1).max(2000)).max(8), tooManyClaims: z.boolean().optional() });
 const AssessmentSchema = z.object({
   verdict: z.enum(Object.keys(VERDICTS) as [keyof typeof VERDICTS, ...Array<keyof typeof VERDICTS>]),
+  takeaway: z.string().min(1).max(260).optional(),
   summary: z.string().min(1).max(2000),
   evidenceUrls: z.array(z.string()).max(10),
   reviews: z.array(z.object({ id: z.string(), applicable: z.boolean(), explanation: z.string().max(1000) })).max(5),
@@ -26,10 +27,10 @@ Verdicts:
 - disputed: evidence establishes that the assertion needs material context or qualifications.
 - mixed: credible, applicable evidence genuinely disagrees after checking dates, definitions and scope. Explain both sides; never decide by counting sources.
 - unverifiable: insufficient inspected evidence, or no verifiable factual assertion.
-Give a neutral explanation of at most 80 words. Cite the web sources you actually use. Do not treat a search result's existence, an empty search, or a publisher rating alone as proof.
+Give a takeaway of at most 30 words: lead with the main finding and preserve any material uncertainty, attribution or qualification. Distinguish evidence that someone reported a proposal from evidence that the proposal was agreed or confirmed. Do not repeat the claim, verdict label or generic disclaimers in the takeaway. Also give a neutral fuller explanation in summary, at most 80 words. Cite the web sources you actually use. Do not treat a search result's existence, an empty search, or a publisher rating alone as proof.
 For published reviews, assess whether the article text addresses this exact assertion and circumstances, including people, place, period, numbers and definitions. Only a review with supplied article text can contribute evidence; mark a different or unreadable review inapplicable. Keep the publisher's original rating distinct from your verdict.
 End your response with exactly one <assessment>JSON</assessment> block, with these fields:
-{"verdict":"supported|contradicted|disputed|mixed|unverifiable","summary":"explanation","evidenceUrls":["URLs of web sources actually cited"],"reviews":[{"id":"supplied review id","applicable":true,"explanation":"why the read review addresses this claim, or why not"}]}
+{"verdict":"supported|contradicted|disputed|mixed|unverifiable","takeaway":"short conclusion with important qualifications","summary":"fuller explanation","evidenceUrls":["URLs of web sources actually cited"],"reviews":[{"id":"supplied review id","applicable":true,"explanation":"why the read review addresses this claim, or why not"}]}
 Do not invent review ids or URLs. If no applicable inspected evidence supports a verdict, return unverifiable.`;
 
 // Both prompts affect the result and must invalidate old single-verdict caches.
@@ -113,6 +114,7 @@ export async function factCheckWithClaude(req: FactCheckRequest) {
     claims.push({
       claim,
       verdict: hasEvidence ? assessment.verdict : 'unverifiable',
+      takeaway: hasEvidence ? assessment.takeaway : "Couldn't verify this claim from available sources.",
       summary: hasEvidence ? assessment.summary : "Couldn't verify this claim with inspectable sources.",
       sources,
       reviews,

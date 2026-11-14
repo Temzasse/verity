@@ -5,10 +5,32 @@ services:
     build:
       context: .
       dockerfile: server/Dockerfile
-    env_file: server/.env
+    # Docker Manager supplies the project .env used for these references.
+    # For a file-based deployment, pass --env-file server/.env to Compose.
     environment:
       HOST: 0.0.0.0
       PORT: 8787
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:-}
+      VERITY_MODEL: ${VERITY_MODEL:-claude-haiku-5-5}
+      GOOGLE_FACT_CHECK_API_KEY: ${GOOGLE_FACT_CHECK_API_KEY:-}
+      CONTEXT_DEV_API_KEY: ${CONTEXT_DEV_API_KEY:-}
+      TYPESAFE_API_KEY: ${TYPESAFE_API_KEY:-}
+      DAILY_BUDGET_USD: ${DAILY_BUDGET_USD:-1}
+      SCRAPER: ${SCRAPER:-contextdev}
+      CONTEXT_DEV_TIMEOUT_MS: ${CONTEXT_DEV_TIMEOUT_MS:-45000}
+      CONTEXT_DEV_ZDR: ${CONTEXT_DEV_ZDR:-}
+      EXTRACT_CACHE_HOURS: ${EXTRACT_CACHE_HOURS:-12}
+      VERIFIER: ${VERIFIER:-jev}
+      JEV_MODEL: ${JEV_MODEL:-jev-1.14.0}
+      JEV_SCORE: ${JEV_SCORE:-fair}
+      RATE_ANALYZE_PER_HOUR: ${RATE_ANALYZE_PER_HOUR:-30}
+      RATE_FACTCHECK_PER_HOUR: ${RATE_FACTCHECK_PER_HOUR:-15}
+      RATE_EXTRACT_PER_HOUR: ${RATE_EXTRACT_PER_HOUR:-30}
+      RATE_FEEDBACK_PER_HOUR: ${RATE_FEEDBACK_PER_HOUR:-120}
+      RATE_VERIFY_PER_HOUR: ${RATE_VERIFY_PER_HOUR:-120}
+      FACT_CHECK_HEARTBEAT_MS: ${FACT_CHECK_HEARTBEAT_MS:-10000}
+      VERITY_TOKEN: ${VERITY_TOKEN:-}
     volumes:
       - verity-cache:/app/server/.cache
     restart: unless-stopped

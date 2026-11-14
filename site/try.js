@@ -311,7 +311,7 @@ function renderCard(finding, index, state) {
   card.dataset.index = String(index);
   card.style.setProperty('--cat', CATEGORIES[finding.category].color);
   card.addEventListener('click', (e) => {
-    if (e.target.closest('button, a')) return;
+    if (e.target.closest('button, a, details')) return;
     activate(index, state, 'text');
   });
   fillCard(card, finding, index, state);
@@ -322,15 +322,26 @@ function fillCard(card, finding, index, state) {
   const label = CATEGORIES[finding.category].label;
   const showTechnique = finding.technique && finding.technique.toLowerCase() !== label.toLowerCase();
   const quote = finding.quote || state.sentences[finding.sentenceId].text;
-  card.replaceChildren(
-    el('div', 'try-card-head', [chip(finding.category)]),
-    ...(showTechnique ? [el('p', 'try-technique', finding.technique)] : []),
+  const checked = state.checks.get(index)?.status === 'done';
+  const head = el('div', 'try-card-head', [chip(finding.category)]);
+  const about = el('details', 'finding-details');
+  about.append(
+    el('summary', null, checked ? 'Why flagged' : 'About this flag'),
+    ...(checked ? [head] : []),
+    ...(checked && showTechnique ? [el('p', 'try-technique', finding.technique)] : []),
     ...(techniques[finding.techniqueId] ? [el('p', 'try-technique-def', techniques[finding.techniqueId].definition)] : []),
-    el('blockquote', 'try-quote', `“${quote.length > 160 ? `${quote.slice(0, 157)}…` : quote}”`),
-    el('p', 'try-rationale', finding.rationale),
-    ...(CHECKABLE.has(finding.category) ? [factCheckSection(card, finding, index, state)] : []),
-    feedbackRow(card, finding, index, state),
+    ...(checked ? [el('p', 'try-rationale', finding.rationale)] : []),
   );
+  card.replaceChildren(...(checked
+    ? [factCheckSection(card, finding, index, state), about, feedbackRow(card, finding, index, state)]
+    : [head,
+      ...(showTechnique ? [el('p', 'try-technique', finding.technique)] : []),
+      el('blockquote', 'try-quote', `“${quote.length > 160 ? `${quote.slice(0, 157)}…` : quote}”`),
+      el('p', 'try-rationale', finding.rationale),
+      ...(CHECKABLE.has(finding.category) ? [factCheckSection(card, finding, index, state)] : []),
+      ...(techniques[finding.techniqueId] ? [about] : []),
+      feedbackRow(card, finding, index, state),
+    ]));
 }
 
 const VOTE_LABELS = { yes: 'Yes', no: 'No', unsure: 'Not sure' };

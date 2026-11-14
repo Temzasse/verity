@@ -524,6 +524,13 @@ h1 {
 .factcheck {
   margin-top: 12px;
 }
+.has-assessment > .factcheck {
+  margin-top: 0;
+}
+.tooltip > .finding-details[open] {
+  max-height: 25vh;
+  overflow-y: auto;
+}
 .factcheck .claim-results {
   max-height: 45vh;
   overflow-y: auto;

@@ -11,26 +11,31 @@ if [ -f .env ]; then set -a; source .env; set +a; fi
 : "${VPS_HOST:?Set VPS_HOST in .env, e.g. root@203.0.113.10}"
 VPS_DIR="${VPS_DIR:-/opt/verity}"
 
-if [ ! -f server/.env ]; then
-  echo "server/.env is missing (API key, budget). Copy server/.env.example and fill it in." >&2
-  exit 1
-fi
-
 # 1. Extension zip for the download button, pointed at this domain
 bash scripts/release.sh "$VERITY_DOMAIN"
 
-# 2. Copy what the stack needs (sources, site, Caddy config, secrets) to the VPS
+# 2. Copy application files; keep Hostinger's managed environment on the VPS.
 ssh "$VPS_HOST" "mkdir -p '$VPS_DIR/utils'"
 # One rsync per folder: macOS's openrsync doesn't apply --delete with -R, so removed files would linger.
 for dir in server site deploy; do
-  rsync -az --delete --exclude '.cache' "$dir/" "$VPS_HOST:$VPS_DIR/$dir/"
+  rsync -az --delete --exclude '.cache' --exclude '.env' "$dir/" "$VPS_HOST:$VPS_DIR/$dir/"
 done
 rsync -az utils/analysis.ts "$VPS_HOST:$VPS_DIR/utils/"
 rsync -az docker-compose.yml "$VPS_HOST:$VPS_DIR/"
-ssh "$VPS_HOST" "printf 'VERITY_DOMAIN=%s\nVERITY_ALIASES=%s\n' '$VERITY_DOMAIN' '${VERITY_ALIASES:-}' > '$VPS_DIR/.env' && chmod 600 '$VPS_DIR/server/.env'"
+# Only bootstrap a missing project file. Never replace Docker Manager's saved keys/settings.
+ssh "$VPS_HOST" "if [ ! -f '$VPS_DIR/.env' ]; then umask 077; printf 'VERITY_DOMAIN=%s\nVERITY_ALIASES=%s\n' '$VERITY_DOMAIN' '${VERITY_ALIASES:-}' > '$VPS_DIR/.env'; fi; chmod 600 '$VPS_DIR/.env'; if [ -f '$VPS_DIR/server/.env' ]; then chmod 600 '$VPS_DIR/server/.env'; fi"
 
 # 3. Build and (re)start the containers
-ssh "$VPS_HOST" "cd '$VPS_DIR' && docker compose up -d --build --remove-orphans && docker compose ps"
+ssh "$VPS_HOST" bash -s -- "$VPS_DIR" <<'REMOTE'
+set -euo pipefail
+cd "$1"
+# Keep existing file-based deployments working, with Docker Manager's settings taking precedence.
+env_args=()
+if [ -f server/.env ]; then env_args+=(--env-file server/.env); fi
+env_args+=(--env-file .env)
+docker compose "${env_args[@]}" up -d --build --remove-orphans
+docker compose "${env_args[@]}" ps
+REMOTE
 
 echo
 echo "Deployed: https://${VERITY_DOMAIN}  (API: https://${VERITY_DOMAIN}/api/health)"

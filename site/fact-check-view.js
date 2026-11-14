@@ -18,17 +18,23 @@ export function renderFactCheckResults(data, verdicts, doc = document) {
     } catch { return null; }
   };
   const root = el('div', 'claim-results');
-  if (data.cached) root.append(el('p', 'claim-note', 'Previously checked'));
-  if (!data.claims.length) root.append(el('p', 'claim-note', 'No independently verifiable factual claim was identified.'));
+  if (!data.claims.length) root.append(el('p', 'claim-note', 'No factual claim to verify.'));
   for (const result of data.claims) {
     const section = el('section', 'claim-result');
-    section.append(el('p', 'claim-text', result.claim));
+    if (data.claims.length > 1) section.append(el('p', 'claim-text', result.claim));
     const verdict = verdicts[result.verdict] || verdicts.unverifiable;
     const badge = el('span', 'chip', verdict.label);
     badge.style.setProperty('--cat', verdict.color);
-    section.append(badge, el('p', 'claim-summary', result.summary));
+    section.append(badge, el('p', `claim-summary${result.takeaway ? '' : ' claim-summary-preview'}`, result.takeaway || result.summary));
+    const details = el('details', 'claim-details');
+    const count = result.sources.length;
+    details.append(el('summary', null, `Details${count ? ` · ${count} source${count === 1 ? '' : 's'}` : ''}`),
+      el('p', 'claim-heading', 'Claim checked'), el('p', 'claim-full-text', result.claim),
+      el('p', 'claim-heading', 'Assessment'), el('p', 'claim-explanation', result.summary));
+    if (data.cached) details.append(el('p', 'claim-note', 'Previously checked'));
+
     if (result.sources.length) {
-      section.append(el('p', 'claim-heading', 'Evidence used'));
+      details.append(el('p', 'claim-heading', 'Evidence used'));
       const list = el('ul', 'claim-sources');
       for (const source of result.sources) {
         const a = link(source.url, source.title);
@@ -38,11 +44,10 @@ export function renderFactCheckResults(data, verdicts, doc = document) {
         if (source.citedText) item.append(el('blockquote', 'source-excerpt', source.citedText));
         list.append(item);
       }
-      section.append(list);
+      details.append(list);
     }
     if (result.reviews.length) {
-      const details = el('details', 'claim-reviews');
-      details.append(el('summary', null, `Published fact-checks (${result.reviews.length})`));
+      details.append(el('p', 'claim-heading', `Published fact-checks (${result.reviews.length})`));
       for (const review of result.reviews) {
         const a = link(review.url, review.title);
         if (!a) continue;
@@ -57,13 +62,13 @@ export function renderFactCheckResults(data, verdicts, doc = document) {
         item.append(el('p', 'claim-note', status), el('p', 'claim-note', review.explanation));
         details.append(item);
       }
-      section.append(details);
     } else if (result.reviewSearchStatus === 'complete') {
-      section.append(el('p', 'claim-note', 'No matching published fact-checks found.'));
+      details.append(el('p', 'claim-note', 'No matching published fact-checks found.'));
     }
     if (result.reviewSearchStatus !== 'complete') {
-      section.append(el('p', 'claim-note', 'Published fact-checks weren’t available. Web research was used instead.'));
+      details.append(el('p', 'claim-note', 'Published fact-checks weren’t available. Web research was used instead.'));
     }
+    section.append(details);
     root.append(section);
   }
   return root;
