@@ -12,6 +12,7 @@ import { TECHNIQUES } from '@/utils/analysis';
 import type { PageContent } from './extract';
 import { applyHighlights, clearHighlights, setActiveHighlight, type PlacedFinding } from './highlight';
 import { clearResult } from './clear-result';
+import { createTooltipPositioner } from './tooltip';
 import { renderFactCheckResults } from '../../site/fact-check-view.js';
 
 /** Categories whose findings get a "Check this claim" button (factual claims, not rhetoric). */
@@ -87,6 +88,7 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
   let sweep!: HTMLElement;
   let canvas!: HTMLCanvasElement;
   let tooltip!: HTMLElement;
+  let tooltipPosition!: ReturnType<typeof createTooltipPositioner>;
   let focus!: HTMLElement;
   let active: PlacedFinding | null = null;
   let placed: PlacedFinding[] = [];
@@ -118,7 +120,8 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
       body = container.querySelector('.body')!;
       sweep = container.querySelector('.sweep')!;
       tooltip = container.querySelector('.tooltip')!;
-      tooltip.addEventListener('toggle', positionTooltip, true);
+      tooltipPosition = createTooltipPositioner(tooltip);
+      tooltip.addEventListener('toggle', onTooltipToggle, true);
       focus = container.querySelector('.focus')!;
       canvas = container.querySelector('.dither')!;
       container.querySelector('.close')!.addEventListener('click', () => {
@@ -212,65 +215,21 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
     focus.style.height = `${box.bottom - box.top}px`;
   }
 
+  function onTooltipToggle() {
+    positionTooltip();
+    tooltipPosition.scrollIntoView();
+  }
+
   function onResize() {
+    tooltipPosition.reset();
     positionTooltip();
   }
 
-  // Tooltip follows its range while the page scrolls (including nested scroll containers).
+  // Keep the original placement relative to the passage, including in nested scroll containers.
   function positionTooltip() {
     positionFocus();
     if (!active) return;
-    const rects = active.range.getClientRects();
-    const rect = rects[0] ?? active.range.getBoundingClientRect();
-    if (!rect || (rect.width === 0 && rect.height === 0)) return;
-    tooltip.style.maxHeight = ''; // measure the natural height
-    const tw = tooltip.offsetWidth;
-    const th = tooltip.offsetHeight;
-    const gap = 10;
-    const margin = 8;
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-    // Never cover the spotlit paragraph, so the reader always sees the whole passage. In order:
-    // above it, below it, beside it (wide pages), then in the taller free band above/below with the
-    // tooltip scrolling inside; only if there's no room at all does it sit next to the highlight.
-    const box = spotlightBox(active);
-    const centeredLeft = Math.min(Math.max(margin, rect.left + Math.min(rect.width, 240) / 2 - tw / 2), vw - tw - margin);
-    const spaceAbove = box.top - gap - margin;
-    const spaceBelow = vh - box.bottom - gap - margin;
-    let place: 'above' | 'below' | 'side';
-    let top: number;
-    let left = centeredLeft;
-    let maxHeight: number | null = null;
-    if (th <= spaceAbove) {
-      place = 'above';
-      top = box.top - gap - th;
-    } else if (th <= spaceBelow) {
-      place = 'below';
-      top = box.bottom + gap;
-    } else if (vw - box.right - gap - margin >= tw || box.left - gap - margin >= tw) {
-      place = 'side';
-      left = vw - box.right - gap - margin >= tw ? box.right + gap : box.left - gap - tw;
-      top = Math.min(Math.max(margin, rect.top - 20), vh - th - margin);
-      if (th > vh - margin * 2) {
-        top = margin;
-        maxHeight = vh - margin * 2;
-      }
-    } else if (Math.max(spaceAbove, spaceBelow) >= 180) {
-      place = spaceBelow >= spaceAbove ? 'below' : 'above';
-      maxHeight = place === 'below' ? spaceBelow : spaceAbove;
-      top = place === 'below' ? box.bottom + gap : margin;
-    } else {
-      place = rect.top - th - gap < margin ? 'below' : 'above';
-      top = place === 'below' ? rect.bottom + gap : rect.top - th - gap;
-    }
-    if (maxHeight !== null) tooltip.style.maxHeight = `${maxHeight}px`;
-    tooltip.style.left = `${left}px`;
-    const positionedHeight = Math.min(th, maxHeight ?? th);
-    tooltip.style.top = `${Math.min(Math.max(margin, top), Math.max(margin, vh - positionedHeight - margin))}px`;
-    tooltip.classList.toggle('below', place === 'below');
-    tooltip.classList.toggle('side', place === 'side');
-    tooltip.classList.toggle('capped', maxHeight !== null);
-    tooltip.style.setProperty('--arrow-x', `${Math.min(Math.max(12, rect.left + 12 - left), tw - 12)}px`);
+    tooltipPosition.update(active.range, spotlightBox(active));
   }
 
   function showFinding(finding: PlacedFinding | null, { scroll = true } = {}) {
@@ -283,6 +242,7 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
     });
     if (!finding) {
       tooltip.hidden = true;
+      tooltipPosition.reset();
       focusKey = null;
       focusReady = false;
       focusToken++;
@@ -330,6 +290,7 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
       if (willScroll) window.scrollBy({ top: delta, behavior: 'smooth' });
     }
     if (isNew) {
+      tooltipPosition.reset();
       focusKey = key;
       scheduleFocus(willScroll);
     } else {

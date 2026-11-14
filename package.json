@@ -10,7 +10,7 @@
     "build": "wxt build",
     "zip": "wxt zip",
     "compile": "tsc --noEmit",
-    "test": "node --test server/*.test.ts",
+    "test": "node --test server/*.test.ts entrypoints/content/*.test.ts",
     "postinstall": "wxt prepare",
     "server": "node --env-file-if-exists=server/.env --watch server/index.ts",
     "site": "node scripts/site-dev.mjs",
