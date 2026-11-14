@@ -1,4 +1,5 @@
 import { Readability } from '@mozilla/readability';
+import type { AnalysisRequest } from '@/utils/analysis';
 
 /**
  * Extracts the main article text from the live page, split into sentences, keeping each
@@ -37,10 +38,6 @@ export type PageContent = {
   sentences: ArticleSentence[];
 };
 
-/** JSON-safe payload for an analysis backend (no DOM references). */
-export type AnalysisRequest = Omit<PageContent, 'sentences'> & {
-  sentences: { id: number; text: string; block: number }[];
-};
 
 const ID_ATTR = 'data-verity-id';
 const MIN_WORDS = 4;

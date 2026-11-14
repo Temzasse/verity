@@ -12,6 +12,6 @@ export default defineConfig({
   webExt: {
     // Keep a persistent dev profile so logins and extension storage survive restarts.
     chromiumArgs: ['--user-data-dir=./.chrome-profile'],
-    startUrls: ['https://example.com'],
+    // Pages to open on `pnpm dev`: set startUrls in web-ext.config.ts (personal, gitignored).
   },
 });

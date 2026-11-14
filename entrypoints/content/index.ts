@@ -119,7 +119,7 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
     active = finding;
     setActiveHighlight(finding);
     body.querySelectorAll('.finding').forEach((item) => {
-      const isActive = !!finding && item.getAttribute('data-sentence') === String(finding.sentenceId);
+      const isActive = !!finding && item.getAttribute('data-key') === findingKey(finding);
       item.classList.toggle('active', isActive);
       if (isActive) item.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     });
@@ -133,6 +133,7 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
         chip(finding.category),
         el('span', 'confidence', `${Math.round(finding.confidence * 100)}% confidence`),
       ]),
+      ...(finding.technique ? [el('p', 'technique', finding.technique)] : []),
       el('p', 'rationale', finding.rationale),
     );
     tooltip.style.setProperty('--cat', meta.color);
@@ -188,29 +189,43 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
   document.addEventListener('pointermove', onPagePointerMove, { capture: true, passive: true });
   document.addEventListener('keydown', onKeyDown, true);
 
-  function renderResult({ content, findings }: ScanResult) {
-    placed = applyHighlights(findings, content.sentences);
+  function renderResult(result: ScanResult) {
+    if (!result.ok) {
+      placed = [];
+      body.replaceChildren(
+        el('p', 'label', 'Scan failed'),
+        el('p', 'error', result.error),
+        el('p', 'muted note', 'Check the analysis server terminal for details.'),
+      );
+      return;
+    }
+    const { content, analysis } = result;
+    placed = applyHighlights(analysis.findings, content.sentences);
     const list = el('ol', 'findings');
     for (const f of placed) {
       const button = el('button', 'finding', [
         el('div', 'finding-head', [chip(f.category), el('span', 'confidence', `${Math.round(f.confidence * 100)}%`)]),
+        ...(f.technique ? [el('p', 'technique', f.technique)] : []),
         el('p', 'excerpt', truncate(f.sentence.text, 140)),
       ]);
       button.type = 'button';
-      button.setAttribute('data-sentence', String(f.sentenceId));
+      button.setAttribute('data-key', findingKey(f));
       button.addEventListener('click', () => showFinding(f));
       list.append(el('li', null, [button]));
     }
 
-    const summary = content.sentences.length
-      ? `${placed.length} flagged of ${content.sentences.length} sentences`
-      : 'No article text found on this page.';
+    const summary = !content.sentences.length
+      ? 'No article text found on this page.'
+      : placed.length
+        ? `${placed.length} flagged of ${content.sentences.length} sentences`
+        : `Nothing flagged in ${content.sentences.length} sentences.`;
+    const source = `Analyzed by ${modelLabel(analysis.model)}${analysis.cached ? ' (cached)' : ''}. AI analysis can be wrong.`;
     body.replaceChildren(
       el('p', 'label', content.isArticle ? 'Article' : 'Page'),
       el('p', 'title', content.title || location.hostname),
       el('p', 'muted', summary),
       ...(placed.length ? [list] : []),
-      el('p', 'muted note', 'Placeholder results: sentences and categories are random.'),
+      el('p', 'muted note', source),
     );
   }
 
@@ -270,6 +285,14 @@ function chip(category: keyof typeof CATEGORIES) {
   const node = el('span', 'chip', CATEGORIES[category].label);
   node.style.setProperty('--cat', CATEGORIES[category].color);
   return node;
+}
+
+function findingKey(f: { sentenceId: number; category: string }) {
+  return `${f.sentenceId}:${f.category}`;
+}
+
+function modelLabel(model: string) {
+  return model === 'claude-haiku-5-5' ? 'Claude Haiku 5.5' : model;
 }
 
 function truncate(text: string, max: number) {

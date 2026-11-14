@@ -1,4 +1,8 @@
-import { SCAN_MESSAGE, type CaptureRequest } from '@/utils/messages';
+import { SCAN_MESSAGE, type AnalyzeReply, type AnalyzeRequest, type CaptureRequest } from '@/utils/messages';
+import type { AnalysisResponse } from '@/utils/analysis';
+
+/** Analysis server (server/). Override with WXT_API_URL in .env when it's deployed elsewhere. */
+const API_URL: string = import.meta.env.WXT_API_URL || 'http://localhost:8787';
 
 export default defineBackground(() => {
   // Toolbar button (no popup) → scan the active tab.
@@ -13,11 +17,53 @@ export default defineBackground(() => {
   });
 
   // Screenshot of the visible viewport, used by the content script for the scan dither effect.
-  browser.runtime.onMessage.addListener((message: CaptureRequest, sender) => {
-    if (message?.type !== 'verity:capture' || sender.tab?.windowId == null) return;
-    return browser.tabs.captureVisibleTab(sender.tab.windowId, { format: 'png' });
+  // Uses sendResponse + `return true` (the classic async-reply pattern) rather than returning a
+  // Promise, which isn't honored in every Chrome setup and silently replies `undefined`.
+  browser.runtime.onMessage.addListener((message: CaptureRequest, sender, sendResponse) => {
+    if (message?.type !== 'verity:capture' || sender.tab?.windowId == null) return false;
+    browser.tabs
+      .captureVisibleTab(sender.tab.windowId, { format: 'png' })
+      .then(sendResponse, (err) => {
+        console.warn('[Verity] capture failed', err);
+        sendResponse(null);
+      });
+    return true;
+  });
+
+  // Page analysis goes through the background: extension pages aren't subject to the page's CSP
+  // or CORS, and the server URL/token stay out of the page.
+  browser.runtime.onMessage.addListener((message: AnalyzeRequest, _sender, sendResponse) => {
+    if (message?.type !== 'verity:analyze') return false;
+    console.log('[Verity] analyze request:', message.request.sentences.length, 'sentences', message.request.url);
+    analyzeOnServer(message)
+      .catch((err): AnalyzeReply => ({ ok: false, error: `Background error: ${err instanceof Error ? err.message : String(err)}` }))
+      .then((reply) => {
+        console.log('[Verity] analyze reply:', reply.ok ? `${reply.data.findings.length} findings` : reply.error);
+        sendResponse(reply);
+      });
+    return true;
   });
 });
+
+async function analyzeOnServer({ request }: AnalyzeRequest): Promise<AnalyzeReply> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}/analyze`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(import.meta.env.WXT_API_TOKEN ? { 'X-Verity-Token': import.meta.env.WXT_API_TOKEN } : {}),
+      },
+      body: JSON.stringify(request),
+    });
+  } catch (err) {
+    console.warn('[Verity] fetch failed', err);
+    return { ok: false, error: `Can't reach the analysis server at ${API_URL}. Start it with \`pnpm server\`.` };
+  }
+  const body = (await res.json().catch(() => null)) as (AnalysisResponse & { error?: string }) | null;
+  if (!res.ok || !body) return { ok: false, error: body?.error ?? `Analysis server error ${res.status}` };
+  return { ok: true, data: body };
+}
 
 async function sendScan(tabId: number) {
   try {

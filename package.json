@@ -5,18 +5,24 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "wxt",
+    "dev": "concurrently -k --handle-input -n ext,server -c blue,magenta \"pnpm:dev:ext\" \"pnpm:server\"",
+    "dev:ext": "wxt",
     "build": "wxt build",
     "zip": "wxt zip",
     "compile": "tsc --noEmit",
-    "postinstall": "wxt prepare"
+    "postinstall": "wxt prepare",
+    "server": "node --env-file-if-exists=server/.env --watch server/index.ts"
   },
   "devDependencies": {
+    "@types/node": "^26.6.6",
+    "concurrently": "^10.0.7",
     "typescript": "^7.0.2",
     "web-ext": "^10.8.0",
     "wxt": "0.21.5"
   },
   "dependencies": {
-    "@mozilla/readability": "^0.6.0"
+    "@anthropic-ai/sdk": "^1.8.0",
+    "@mozilla/readability": "^0.6.0",
+    "zod": "^4.6.7"
   }
 }
