@@ -1,6 +1,8 @@
 import {
   SCAN_MESSAGE,
   type CaptureRequest,
+  type FactCheckEventMessage,
+  type FactCheckStreamRequest,
   type QuickMessage,
   type QuickReply,
   type QuickRunRequest,
@@ -64,7 +66,72 @@ export default defineBackground(() => {
       });
     return true;
   });
+
+  // Streamed fact-check: progress events go straight to the requesting tab, the final result is the reply.
+  browser.runtime.onMessage.addListener((message: FactCheckStreamRequest, sender, sendResponse) => {
+    if (message?.type !== 'verity:fact-check-stream' || sender.tab?.id == null) return false;
+    const tabId = sender.tab.id;
+    const forward = (event: FactCheckEventMessage['event']) =>
+      browser.tabs
+        .sendMessage(tabId, { type: 'verity:fact-check-event', id: message.id, event } satisfies FactCheckEventMessage, {
+          frameId: sender.frameId ?? 0,
+        })
+        .catch(() => {});
+    streamFactCheck(message.body, forward)
+      .catch((err): ServerReply => ({ ok: false, error: `Background error: ${err instanceof Error ? err.message : String(err)}` }))
+      .then(sendResponse);
+    return true;
+  });
 });
+
+/** POST /fact-check with stream: true, forwarding each NDJSON event until the final result. */
+async function streamFactCheck(
+  body: FactCheckStreamRequest['body'],
+  forward: (event: FactCheckEventMessage['event']) => void,
+): Promise<ServerReply<'/fact-check'>> {
+  // Research can outlive MV3's idle timeout; keep the worker alive while the stream is open.
+  const keepAlive = setInterval(() => void browser.runtime.getPlatformInfo().catch(() => {}), 25_000);
+  try {
+    let res: Response;
+    try {
+      res = await fetch(`${API_URL}/fact-check`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(import.meta.env.WXT_API_TOKEN ? { 'X-Verity-Token': import.meta.env.WXT_API_TOKEN } : {}),
+        },
+        body: JSON.stringify({ ...body, stream: true }),
+      });
+    } catch {
+      return { ok: false, error: `Can't reach the analysis server at ${API_URL}. Start it with \`pnpm server\`.` };
+    }
+    // Errors before the stream starts (rate limit, budget, validation) arrive as plain JSON.
+    if (!res.ok || !res.body || !(res.headers.get('content-type') ?? '').includes('ndjson')) {
+      const data = (await res.json().catch(() => null)) as { error?: string } | null;
+      return { ok: false, error: data?.error ?? `Analysis server error ${res.status}` };
+    }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    for (;;) {
+      const { done, value } = await reader.read();
+      buffer += decoder.decode(value, { stream: !done });
+      let newline: number;
+      while ((newline = buffer.indexOf('\n')) >= 0) {
+        const line = buffer.slice(0, newline).trim();
+        buffer = buffer.slice(newline + 1);
+        if (!line) continue;
+        const event = JSON.parse(line) as FactCheckEventMessage['event'];
+        if (event.type === 'done') return { ok: true, data: event.data };
+        if (event.type === 'error') return { ok: false, error: event.error };
+        if (event.type !== 'ping') forward(event);
+      }
+      if (done) return { ok: false, error: 'The fact-check stopped before finishing. Try again.' };
+    }
+  } finally {
+    clearInterval(keepAlive);
+  }
+}
 
 const OFFSCREEN_URL = '/offscreen.html';
 let creatingOffscreen: Promise<void> | undefined;

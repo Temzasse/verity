@@ -36,7 +36,13 @@ Do not invent review ids or URLs. If no applicable inspected evidence supports a
 // Both prompts affect the result and must invalidate old single-verdict caches.
 export const FACT_CHECK_VERSION = `${EXTRACT_CLAIMS_PROMPT}\n${FACT_CHECK_PROMPT}\nclaims-v1\ngoogle:${!!process.env.GOOGLE_FACT_CHECK_API_KEY}`;
 
-export async function factCheckWithClaude(req: FactCheckRequest) {
+/** Progress callbacks for streamed fact-checks: the extracted claims, then each claim's result. */
+export type FactCheckHooks = {
+  onClaims?: (claims: string[]) => void;
+  onClaim?: (index: number, result: ClaimAssessment) => void;
+};
+
+export async function factCheckWithClaude(req: FactCheckRequest, hooks: FactCheckHooks = {}) {
   let costUsd = 0;
   let searches = 0;
 
@@ -88,7 +94,9 @@ export async function factCheckWithClaude(req: FactCheckRequest) {
   if (split.data.tooManyClaims) throw new AnalysisError('This sentence contains too many separate claims to check at once. Check a shorter passage.', 422);
   const claims: ClaimAssessment[] = [];
   const reviewArticles = new Map<string, Promise<string | null>>();
-  for (const claim of [...new Set(split.data.claims)]) {
+  const toCheck = [...new Set(split.data.claims)];
+  hooks.onClaims?.(toCheck);
+  for (const claim of toCheck) {
     const published = await findPublishedReviews(claim, reviewArticles);
     const content = await run([{ role: 'user', content: JSON.stringify({ ...req, claim, originalSentence: req.claim,
       reviews: published.reviews }) }], true);
@@ -120,6 +128,7 @@ export async function factCheckWithClaude(req: FactCheckRequest) {
       reviews,
       reviewSearchStatus: published.status,
     });
+    hooks.onClaim?.(claims.length - 1, claims[claims.length - 1]!);
   }
   return { claims, costUsd, searches };
 }

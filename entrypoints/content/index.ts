@@ -1,11 +1,13 @@
 import './style.css';
+// The full Verity wordmark (same file as the website), inlined into the panel header.
+import wordmark from '../../site/assets/verity-wordmark.svg?raw';
 import '../../site/fact-check.css';
 import type { ContentScriptContext } from 'wxt/utils/content-script-context';
 import { CAPTURE_MESSAGE, type VerityMessage } from '@/utils/messages';
 import { startScan, type Outcome } from './scan';
 import { playScanEffect } from './dither';
-import type { AnalysisResponse, Category, FactCheckResponse, QuickResponse, Vote, VoteTally } from '@/utils/analysis';
-import { CATEGORIES, VERDICTS, factCheck, sendFeedback } from './analyze';
+import type { AnalysisResponse, Category, ClaimAssessment, FactCheckResponse, PendingClaim, QuickResponse, Vote, VoteTally } from '@/utils/analysis';
+import { CATEGORIES, VERDICTS, factCheckStream, sendFeedback } from './analyze';
 import { TECHNIQUES } from '@/utils/analysis';
 import type { PageContent } from './extract';
 import { applyHighlights, clearHighlights, setActiveHighlight, type PlacedFinding } from './highlight';
@@ -31,7 +33,8 @@ type VoteState =
 const VOTE_LABELS: Record<Vote, string> = { yes: 'Yes', no: 'No', unsure: 'Not sure' };
 
 type FactCheckState =
-  | { status: 'loading' }
+  /** `progress`: the claims being checked (finished ones as results), once the server has extracted them. */
+  | { status: 'loading'; progress?: (ClaimAssessment | PendingClaim)[] }
   | { status: 'done'; data: FactCheckResponse }
   | { status: 'error'; error: string };
 
@@ -104,8 +107,7 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
           <div class="sweep" hidden></div>
           <aside class="panel" role="dialog" aria-label="Verity">
             <header>
-              <span class="logo" aria-hidden="true"></span>
-              <h1>Verity</h1>
+              <h1 class="wordmark" aria-label="Verity">${wordmark}</h1>
               <button class="close" type="button" aria-label="Close">×</button>
             </header>
             <section class="body"></section>
@@ -348,7 +350,13 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
       if (state) section.append(el('p', 'error', state.error));
       section.append(button);
     } else if (state.status === 'loading') {
-      section.append(el('p', 'muted checking', 'Checking sources…'));
+      // One pending indicator until there's something to show per claim (several claims, or a finished one).
+      const progress = state.progress;
+      if (progress && (progress.length > 1 || progress.some((c) => !('pending' in c)))) {
+        section.append(renderFactCheckResults({ claims: progress }, VERDICTS));
+      } else {
+        section.append(el('p', 'muted checking', 'Checking sources…'));
+      }
     } else {
       section.append(renderFactCheckResults(state.data, VERDICTS));
     }
@@ -425,15 +433,34 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
       .join(' ');
     factChecks.set(key, { status: 'loading' });
     refreshFinding(finding);
+    const started = performance.now();
     try {
-      const data = await factCheck({
-        version: 2,
-        url: article.url,
-        title: article.title,
-        publishedTime: article.publishedTime,
-        claim: finding.sentence.text,
-        context,
-      });
+      const data = await factCheckStream(
+        {
+          version: 2,
+          url: article.url,
+          title: article.title,
+          publishedTime: article.publishedTime,
+          claim: finding.sentence.text,
+          context,
+        },
+        (event) => {
+          // Development builds log each streamed event with its timing, to see results arrive one by one.
+          if (import.meta.env.DEV) {
+            console.log(`[Verity] fact-check ${event.type} after ${((performance.now() - started) / 1000).toFixed(1)} s`, event);
+          }
+          const current = factChecks.get(key);
+          if (current?.status !== 'loading') return;
+          if (event.type === 'claims') {
+            factChecks.set(key, { status: 'loading', progress: event.claims.map((claim) => ({ claim, pending: true as const })) });
+          } else if (event.type === 'claim' && current.progress) {
+            const progress = [...current.progress];
+            progress[event.index] = event.result;
+            factChecks.set(key, { status: 'loading', progress });
+          } else return;
+          refreshFinding(finding);
+        },
+      );
       factChecks.set(key, { status: 'done', data });
     } catch (err) {
       factChecks.set(key, { status: 'error', error: err instanceof Error ? err.message : String(err) });

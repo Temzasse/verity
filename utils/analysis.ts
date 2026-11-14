@@ -207,6 +207,8 @@ export type AnalysisResponse = {
 export type FactCheckRequest = {
   /** Version 2 returns per-claim results; omitted by older installed extensions. */
   version?: 2;
+  /** Stream progress as newline-delimited JSON (FactCheckEvent per line) instead of one response. */
+  stream?: boolean;
   url: string;
   title: string;
   publishedTime: string | null;
@@ -252,6 +254,20 @@ export type ClaimAssessment = {
   reviews: PublishedClaimReview[];
   reviewSearchStatus: 'complete' | 'unavailable' | 'not-configured';
 };
+
+/** A claim whose check is still running, shown while a streamed fact-check is in progress. */
+export type PendingClaim = { claim: string; pending: true };
+
+/**
+ * One line of a streamed POST /fact-check (stream: true): the extracted claims first, then each
+ * claim's result as soon as it's ready, then the complete response. Pings keep the connection alive.
+ */
+export type FactCheckEvent =
+  | { type: 'claims'; claims: string[] }
+  | { type: 'claim'; index: number; result: ClaimAssessment }
+  | { type: 'done'; data: FactCheckResponse }
+  | { type: 'error'; error: string; status: number }
+  | { type: 'ping' };
 
 /** Returned by POST /fact-check. */
 export type FactCheckResponse = {

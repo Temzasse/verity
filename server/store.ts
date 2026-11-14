@@ -27,7 +27,12 @@ export function extractKey(url: string): string {
   return createHash('sha256').update(`extract\n${url.trim().split('#')[0]}`).digest('hex').slice(0, 32);
 }
 
+/** DISABLE_CACHE=1 (server/.env, local only): never reuse stored results, so every request runs fresh. */
+const CACHE_DISABLED = process.env.DISABLE_CACHE === '1';
+if (CACHE_DISABLED) console.warn('[server] DISABLE_CACHE=1: result caching is off, every analysis and fact-check runs fresh (and costs credits).');
+
 export async function getCached<T>(key: string): Promise<T | null> {
+  if (CACHE_DISABLED) return null;
   try {
     return JSON.parse(await readFile(join(DIR, `${key}.json`), 'utf8')) as T;
   } catch {

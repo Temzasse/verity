@@ -1,6 +1,7 @@
 import type {
   AnalysisRequest,
   AnalysisResponse,
+  FactCheckEvent,
   FactCheckRequest,
   FactCheckResponse,
   FeedbackRequest,
@@ -10,7 +11,16 @@ import type {
   VerifyRequest,
   VerifyResponse,
 } from '@/utils/analysis';
-import type { QuickMessage, QuickReply, ServerEndpoints, ServerPath, ServerReply, ServerRequest } from '@/utils/messages';
+import type {
+  FactCheckEventMessage,
+  FactCheckStreamRequest,
+  QuickMessage,
+  QuickReply,
+  ServerEndpoints,
+  ServerPath,
+  ServerReply,
+  ServerRequest,
+} from '@/utils/messages';
 
 export { CATEGORIES, VERDICTS, type Category, type Finding } from '@/utils/analysis';
 
@@ -46,6 +56,31 @@ export async function quickAnalyze(request: QuickRequest): Promise<QuickResponse
 /** Verifies one claim with web search. */
 export function factCheck(request: FactCheckRequest): Promise<FactCheckResponse> {
   return callServer('/fact-check', request);
+}
+
+/**
+ * Streamed fact-check: `onEvent` receives the extracted claims and then each claim's result as soon
+ * as the server has it; resolves with the complete response.
+ */
+export async function factCheckStream(
+  request: FactCheckRequest,
+  onEvent: (event: FactCheckEvent) => void,
+): Promise<FactCheckResponse> {
+  const id = crypto.randomUUID();
+  const listener = (message: FactCheckEventMessage) => {
+    if (message?.type === 'verity:fact-check-event' && message.id === id) onEvent(message.event);
+  };
+  browser.runtime.onMessage.addListener(listener);
+  try {
+    const reply = (await browser.runtime.sendMessage({ type: 'verity:fact-check-stream', id, body: request } satisfies FactCheckStreamRequest)) as
+      | ServerReply<'/fact-check'>
+      | undefined;
+    if (!reply) throw new Error('No response from the extension background. Reload this page and try again.');
+    if (!reply.ok) throw new Error(reply.error);
+    return reply.data;
+  } finally {
+    browser.runtime.onMessage.removeListener(listener);
+  }
 }
 
 /** Records (or changes) the reader's answer to "Is this finding relevant?"; returns everyone's answers. */

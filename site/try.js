@@ -202,6 +202,46 @@ function splitSentences(paragraphs) {
   return { blocks, sentences, truncated };
 }
 
+/**
+ * Streamed fact-check (newline-delimited JSON): `onEvent` gets the extracted claims, then each claim's
+ * result as soon as it's ready; resolves with the complete response.
+ */
+async function factCheckStream(body, onEvent) {
+  let res;
+  try {
+    res = await fetch('/api/fact-check', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...body, stream: true }),
+    });
+  } catch {
+    throw new Error("Couldn't reach the analysis server. Check your connection and try again.");
+  }
+  // Errors before the stream starts (rate limit, budget, validation) arrive as plain JSON.
+  if (!res.ok || !res.body || !(res.headers.get('content-type') ?? '').includes('ndjson')) {
+    const data = await res.json().catch(() => null);
+    throw new Error(data?.error ?? `The analysis server returned an error (${res.status}).`);
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  for (;;) {
+    const { done, value } = await reader.read();
+    buffer += decoder.decode(value, { stream: !done });
+    let newline;
+    while ((newline = buffer.indexOf('\n')) >= 0) {
+      const line = buffer.slice(0, newline).trim();
+      buffer = buffer.slice(newline + 1);
+      if (!line) continue;
+      const event = JSON.parse(line);
+      if (event.type === 'done') return event.data;
+      if (event.type === 'error') throw new Error(event.error);
+      if (event.type !== 'ping') onEvent(event);
+    }
+    if (done) throw new Error('The fact-check stopped before finishing. Try again.');
+  }
+}
+
 async function api(path, body) {
   let res;
   try {
@@ -483,19 +523,36 @@ function factCheckSection(card, finding, index, state) {
     b.addEventListener('click', async () => {
       state.checks.set(index, { status: 'loading' });
       fillCard(card, finding, index, state);
+      const started = performance.now();
       try {
         const context = state.sentences
           .filter((s) => Math.abs(s.id - finding.sentenceId) <= 2)
           .map((s) => s.text)
           .join(' ');
-        const data = await api('/fact-check', {
-          version: 2,
-          url: state.article.url,
-          title: state.article.title || 'Untitled',
-          publishedTime: state.article.publishedTime ?? null,
-          claim: state.sentences[finding.sentenceId].text,
-          context,
-        });
+        const data = await factCheckStream(
+          {
+            version: 2,
+            url: state.article.url,
+            title: state.article.title || 'Untitled',
+            publishedTime: state.article.publishedTime ?? null,
+            claim: state.sentences[finding.sentenceId].text,
+            context,
+          },
+          (event) => {
+            // When running locally, log each streamed event with its timing.
+            if (CAN_CHANGE_VOTE) console.log(`[Verity] fact-check ${event.type} after ${((performance.now() - started) / 1000).toFixed(1)} s`, event);
+            const current = state.checks.get(index);
+            if (current?.status !== 'loading') return;
+            if (event.type === 'claims') {
+              state.checks.set(index, { status: 'loading', progress: event.claims.map((claim) => ({ claim, pending: true })) });
+            } else if (event.type === 'claim' && current.progress) {
+              const progress = [...current.progress];
+              progress[event.index] = event.result;
+              state.checks.set(index, { status: 'loading', progress });
+            } else return;
+            fillCard(card, finding, index, state);
+          },
+        );
         state.checks.set(index, { status: 'done', data });
       } catch (err) {
         state.checks.set(index, { status: 'error', error: err.message });
@@ -504,7 +561,13 @@ function factCheckSection(card, finding, index, state) {
     });
     section.append(b);
   } else if (check.status === 'loading') {
-    section.append(el('p', 'try-checking', 'Checking sources…'));
+    // One pending indicator until there's something to show per claim (several claims, or a finished one).
+    const progress = check.progress;
+    if (progress && (progress.length > 1 || progress.some((c) => !c.pending))) {
+      section.append(renderFactCheckResults({ claims: progress }, VERDICTS));
+    } else {
+      section.append(el('p', 'try-checking', 'Checking sources…'));
+    }
   } else {
     section.append(renderFactCheckResults(check.data, VERDICTS));
   }

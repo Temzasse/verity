@@ -22,6 +22,12 @@ export function renderFactCheckResults(data, verdicts, doc = document) {
   for (const result of data.claims) {
     const section = el('section', 'claim-result');
     if (data.claims.length > 1) section.append(el('p', 'claim-text', result.claim));
+    // Streamed check still running for this claim.
+    if (result.pending) {
+      section.append(el('p', 'claim-pending', data.claims.length > 1 ? 'Checking…' : 'Checking sources…'));
+      root.append(section);
+      continue;
+    }
     const verdict = verdicts[result.verdict] || verdicts.unverifiable;
     const badge = el('span', 'chip', verdict.label);
     badge.style.setProperty('--cat', verdict.color);

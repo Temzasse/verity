@@ -1,6 +1,7 @@
 import type {
   AnalysisRequest,
   AnalysisResponse,
+  FactCheckEvent,
   FactCheckRequest,
   FactCheckResponse,
   FeedbackRequest,
@@ -44,3 +45,8 @@ export type QuickReply = { ok: true; data: QuickResponse } | { ok: false; error:
 
 export const SCAN_MESSAGE: VerityMessage = { type: 'verity:scan' };
 export const CAPTURE_MESSAGE: CaptureRequest = { type: 'verity:capture' };
+
+/** Content script → background: run a streamed fact-check; the reply is the final ServerReply. */
+export type FactCheckStreamRequest = { type: 'verity:fact-check-stream'; id: string; body: FactCheckRequest };
+/** Background → content script: one progress event of the streamed fact-check `id`. */
+export type FactCheckEventMessage = { type: 'verity:fact-check-event'; id: string; event: FactCheckEvent };

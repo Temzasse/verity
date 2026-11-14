@@ -7,6 +7,7 @@ import {
   type AnalysisRequest,
   type AnalysisResponse,
   type FactCheckRequest,
+  type FactCheckEvent,
   type FactCheckResponse,
   type FeedbackRequest,
   type FeedbackResponse,
@@ -71,6 +72,7 @@ const RequestSchema = z.object({
 
 const FactCheckSchema = z.object({
   version: z.literal(2).optional(),
+  stream: z.boolean().optional(),
   url: z.string().max(4000),
   title: z.string().max(1000),
   publishedTime: z.string().max(100).nullable(),
@@ -153,17 +155,18 @@ async function handleAnalyze(req: IncomingMessage, res: ServerResponse) {
   // confidence check. Turning the verifier on (or changing it) re-checks cached pages without re-analyzing.
   const key = cacheKey(MODEL, PROMPT_VERSION, body);
   const verifiedKey = `${key}-${createHash('sha256').update(VERIFIER_VERSION).digest('hex').slice(0, 8)}`;
+  // Empty results (also ones cached before this rule) are treated as misses so they re-run.
   const cached = await getCached<Finding[]>(verifiedKey);
-  if (cached) {
+  if (cached?.length) {
     console.log(`[server] cache hit ${verifiedKey} (${body.url})`);
     await recordAnalysis(body.sentences.length, cached.map((f) => f.category));
     return json(res, 200, { findings: cached, model: MODEL, cached: true, costUsd: 0 } satisfies AnalysisResponse);
   }
   const raw = await getCached<Finding[]>(key);
-  if (raw) {
+  if (raw?.length) {
     console.log(`[server] cache hit ${key}, ${VERIFIER_ENABLED ? 'verifying' : 'no verifier'} (${body.url})`);
     const findings = await verifyFindings(raw, body);
-    if (findings.every((f) => f.verified) || !VERIFIER_ENABLED) await putCached(verifiedKey, findings);
+    if (findings.length && (findings.every((f) => f.verified) || !VERIFIER_ENABLED)) await putCached(verifiedKey, findings);
     await recordAnalysis(body.sentences.length, findings.map((f) => f.category));
     return json(res, 200, { findings, model: MODEL, cached: true, costUsd: 0 } satisfies AnalysisResponse);
   }
@@ -173,10 +176,11 @@ async function handleAnalyze(req: IncomingMessage, res: ServerResponse) {
   const started = Date.now();
   const { findings: rawFindings, costUsd } = await analyzeWithClaude(body);
   await addSpend(costUsd);
-  await putCached(key, rawFindings);
+  // Empty results aren't cached, so a page that came back clean can be re-analyzed.
+  if (rawFindings.length) await putCached(key, rawFindings);
   const findings = await verifyFindings(rawFindings, body);
   // Only cache the checked version when every finding was checked; otherwise retry the check next time.
-  if (findings.every((f) => f.verified) || !VERIFIER_ENABLED) await putCached(verifiedKey, findings);
+  if (findings.length && (findings.every((f) => f.verified) || !VERIFIER_ENABLED)) await putCached(verifiedKey, findings);
   await recordAnalysis(body.sentences.length, findings.map((f) => f.category));
   console.log(`[server] ${findings.length} findings in ${Date.now() - started} ms, today $${(await spentToday()).toFixed(4)}`);
   json(res, 200, { findings, model: MODEL, cached: false, costUsd } satisfies AnalysisResponse);
@@ -186,15 +190,23 @@ async function handleFactCheck(req: IncomingMessage, res: ServerResponse) {
   if (!checkPost(req, res)) return;
   const parsed = FactCheckSchema.safeParse(await readJson(req));
   if (!parsed.success) return json(res, 400, { error: 'Invalid request', details: z.treeifyError(parsed.error) });
-  const body = parsed.data;
+  // `stream` only changes how the answer is delivered: keep it out of the cache key and the prompt.
+  const { stream, ...body } = parsed.data;
 
   const key = factCheckKey(MODEL, FACT_CHECK_VERSION, body);
   const cached = await getCached<Omit<FactCheckResponse, 'cached' | 'costUsd'> & { checkedAt: number }>(key);
-  if (cached && Date.now() - cached.checkedAt < FACT_CHECK_CACHE_MS) {
+  if (cached && Date.now() - cached.checkedAt < FACT_CHECK_CACHE_MS && cacheableFactCheck(cached.claims)) {
     console.log(`[server] fact-check cache hit ${key}`);
+    if (stream) {
+      const send = ndjson(res);
+      send({ type: 'claims', claims: cached.claims.map((c) => c.claim) });
+      send({ type: 'done', data: { ...cached, cached: true, costUsd: 0 } });
+      return res.end();
+    }
     return sendFactCheck(res, { ...cached, cached: true, costUsd: 0 }, body.version);
   }
   if (rateLimited(req, res, 'fact-check') || (await overBudget(res))) return;
+  if (stream) return streamFactCheck(res, body, key);
 
   console.log(`[server] fact-checking: "${body.claim.slice(0, 100)}"`);
   const started = Date.now();
@@ -209,9 +221,7 @@ async function handleFactCheck(req: IncomingMessage, res: ServerResponse) {
   try {
     const { costUsd, ...result } = await factCheckWithClaude(body);
     const stored = { ...result, model: MODEL, checkedAt: Date.now() };
-    if (result.claims.every((c) => c.reviewSearchStatus !== 'unavailable' && c.reviews.every((r) => r.status !== 'unavailable'))) {
-      await putCached(key, stored);
-    }
+    if (cacheableFactCheck(result.claims)) await putCached(key, stored);
     console.log(
       `[server] checked ${result.claims.length} claims (${result.searches} searches) in ${Date.now() - started} ms, today $${(await spentToday()).toFixed(4)}`,
     );
@@ -227,6 +237,56 @@ async function handleFactCheck(req: IncomingMessage, res: ServerResponse) {
 }
 
 /** Older installations need their original fields until readers update the extension. */
+/** Starts a newline-delimited JSON response and returns a writer for FactCheckEvent lines. */
+function ndjson(res: ServerResponse) {
+  res.writeHead(200, { 'Content-Type': 'application/x-ndjson', 'Cache-Control': 'no-store' });
+  return (event: FactCheckEvent) => {
+    if (!res.writableEnded) res.write(`${JSON.stringify(event)}\n`);
+  };
+}
+
+/**
+ * Streamed fact-check: the extracted claims go out as soon as they're known, then each claim's
+ * result as it finishes, so readers see progress instead of one long wait. Pings every 10 s keep
+ * the connection (and the extension's MV3 worker) alive.
+ */
+async function streamFactCheck(res: ServerResponse, body: Omit<z.infer<typeof FactCheckSchema>, 'stream'>, key: string) {
+  console.log(`[server] fact-checking (streamed): "${body.claim.slice(0, 100)}"`);
+  const started = Date.now();
+  const send = ndjson(res);
+  const ping = setInterval(() => send({ type: 'ping' }), Number(process.env.FACT_CHECK_HEARTBEAT_MS ?? 10_000));
+  ping.unref();
+  res.once('close', () => clearInterval(ping));
+  try {
+    const { costUsd, ...result } = await factCheckWithClaude(body, {
+      onClaims: (claims) => send({ type: 'claims', claims }),
+      onClaim: (index, claim) => send({ type: 'claim', index, result: claim }),
+    });
+    const stored = { ...result, model: MODEL, checkedAt: Date.now() };
+    if (cacheableFactCheck(result.claims)) await putCached(key, stored);
+    console.log(
+      `[server] checked ${result.claims.length} claims (${result.searches} searches) in ${Date.now() - started} ms, today $${(await spentToday()).toFixed(4)}`,
+    );
+    send({ type: 'done', data: { ...stored, cached: false, costUsd } });
+  } catch (err) {
+    const error = err instanceof AnalysisError ? err : new AnalysisError('The fact-check could not finish. Try again.', 500);
+    if (!(err instanceof AnalysisError)) console.error('[server]', err);
+    send({ type: 'error', error: error.message, status: error.status });
+  } finally {
+    clearInterval(ping);
+    res.end();
+  }
+}
+
+/**
+ * Whether a fact-check result may be cached: not when a published-review lookup failed (retry it),
+ * and not when it found nothing (no claims, or no claim could be verified), so it can be re-run.
+ */
+function cacheableFactCheck(claims: FactCheckResponse['claims']): boolean {
+  if (!claims.length || claims.every((c) => c.verdict === 'unverifiable')) return false;
+  return claims.every((c) => c.reviewSearchStatus !== 'unavailable' && c.reviews.every((r) => r.status !== 'unavailable'));
+}
+
 function sendFactCheck(res: ServerResponse, data: FactCheckResponse, version?: 2) {
   if (version === 2) return json(res, 200, data);
   const single = data.claims.length === 1 ? data.claims[0] : undefined;
