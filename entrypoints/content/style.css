@@ -18,7 +18,24 @@
   }
 }
 
+/* Full-viewport popover in the top layer; reset UA popover styles. Clicks pass through to the page. */
+.layer {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  overflow: visible;
+  pointer-events: none;
+}
+
 .panel {
+  pointer-events: auto;
   position: fixed;
   top: 16px;
   right: 16px;
@@ -112,7 +129,7 @@ dd {
   font-weight: 600;
 }
 
-/* Placeholder scan animation: a line sweeping down the viewport. */
+/* Scan line; its position is driven from JS (dither.ts). */
 .sweep {
   position: fixed;
   left: 0;
@@ -122,16 +139,22 @@ dd {
   background: var(--v-accent);
   box-shadow: 0 0 24px 6px color-mix(in srgb, var(--v-accent) 60%, transparent);
   pointer-events: none;
-  animation: v-sweep 900ms ease-in-out;
+  will-change: transform;
+}
+
+/* Dithered page band, rendered at low resolution and scaled up with crisp pixels. */
+.dither {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  image-rendering: pixelated;
+  pointer-events: none;
 }
 .sweep[hidden] {
   display: none;
 }
 
-@keyframes v-sweep {
-  from { transform: translateY(0); }
-  to { transform: translateY(100vh); }
-}
 @keyframes v-in {
   from { opacity: 0; transform: translateY(-6px); }
 }

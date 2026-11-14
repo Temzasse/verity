@@ -8,7 +8,6 @@ export type ScanResult = {
 
 /** Placeholder scan: collects basic page stats. Replace with the real analysis. */
 export async function scanPage(): Promise<ScanResult> {
-  await new Promise((resolve) => setTimeout(resolve, 900)); // fake latency so the scanning state is visible
   const text = document.body.innerText;
   return {
     title: document.title,

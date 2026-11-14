@@ -1,4 +1,4 @@
-import { SCAN_MESSAGE } from '@/utils/messages';
+import { SCAN_MESSAGE, type CaptureRequest } from '@/utils/messages';
 
 export default defineBackground(() => {
   // Toolbar button (no popup) → scan the active tab.
@@ -10,6 +10,12 @@ export default defineBackground(() => {
       console.warn('[Verity] cannot scan this page', tab.url, err);
       await flashBadge(tab.id, '!');
     }
+  });
+
+  // Screenshot of the visible viewport, used by the content script for the scan dither effect.
+  browser.runtime.onMessage.addListener((message: CaptureRequest, sender) => {
+    if (message?.type !== 'verity:capture' || sender.tab?.windowId == null) return;
+    return browser.tabs.captureVisibleTab(sender.tab.windowId, { format: 'png' });
   });
 });
 
