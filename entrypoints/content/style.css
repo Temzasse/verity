@@ -393,3 +393,23 @@ h1 {
   display: block;
   flex: none;
 }
+
+/* Focus mode: while a tooltip is open, spotlight its paragraph and dim the rest of the page. */
+.focus {
+  position: fixed;
+  border-radius: 12px;
+  box-shadow: 0 0 0 200vmax rgb(15 23 42 / 0.55);
+  pointer-events: none;
+}
+.focus.reveal {
+  animation: v-spotlight 320ms ease-out;
+}
+@keyframes v-spotlight {
+  from { opacity: 0; }
+}
+.focus[hidden] {
+  display: none;
+}
+@keyframes v-fade {
+  from { opacity: 0; }
+}

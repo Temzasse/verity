@@ -30,7 +30,10 @@ export default defineConfig({
   },
   webExt: {
     // Keep a persistent dev profile so logins and extension storage survive restarts.
-    chromiumArgs: ['--user-data-dir=./.chrome-profile'],
+    // --test-type hides Chrome's "unsupported command-line flag" warning bar caused by the
+    // --disable-blink-features=AutomationControlled flag web-ext adds (which we keep: it stops
+    // sites from detecting the dev browser as automated and showing bot checks).
+    chromiumArgs: ['--user-data-dir=./.chrome-profile', '--test-type'],
     // Pages to open on `pnpm dev`: set startUrls in web-ext.config.ts (personal, gitignored).
   },
 });

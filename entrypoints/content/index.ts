@@ -72,6 +72,7 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
   let sweep!: HTMLElement;
   let canvas!: HTMLCanvasElement;
   let tooltip!: HTMLElement;
+  let focus!: HTMLElement;
   let active: PlacedFinding | null = null;
   let placed: PlacedFinding[] = [];
   let article: PageContent | null = null;
@@ -85,6 +86,7 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
       container.innerHTML = `
         <div class="layer" popover="manual">
           <canvas class="dither"></canvas>
+          <div class="focus" hidden></div>
           <div class="tooltip" role="tooltip" hidden></div>
           <div class="sweep" hidden></div>
           <aside class="panel" role="dialog" aria-label="Verity">
@@ -100,6 +102,7 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
       body = container.querySelector('.body')!;
       sweep = container.querySelector('.sweep')!;
       tooltip = container.querySelector('.tooltip')!;
+      focus = container.querySelector('.focus')!;
       canvas = container.querySelector('.dither')!;
       container.querySelector('.close')!.addEventListener('click', () => {
         ui.remove();
@@ -109,7 +112,7 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
       showFinding(null);
       clearHighlights();
       window.removeEventListener('scroll', positionTooltip, true);
-      window.removeEventListener('resize', positionTooltip);
+      window.removeEventListener('resize', onResize);
       document.removeEventListener('pointerdown', onPagePointerDown, true);
       document.removeEventListener('pointermove', onPagePointerMove, true);
       document.removeEventListener('keydown', onKeyDown, true);
@@ -120,8 +123,76 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
 
   ui.mount();
 
+  /** Paragraph-level element (p, li, blockquote, heading…) that contains a finding's text. */
+  function paragraphOf(range: Range): Element | null {
+    const node = range.commonAncestorContainer;
+    const el = node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement;
+    return el?.closest('p, li, blockquote, h1, h2, h3, h4, h5, h6, dd, dt, figcaption, td, th, pre') ?? null;
+  }
+
+  // The spotlight appears (with a fade) only once the page has finished scrolling to the finding.
+  let focusReady = false;
+  let focusKey: string | null = null;
+  let focusToken = 0;
+
+  function revealFocus(token: number) {
+    if (token !== focusToken || !active) return;
+    focusReady = true;
+    focus.classList.remove('reveal');
+    void focus.offsetWidth; // restart the fade-in animation
+    focus.classList.add('reveal');
+    positionFocus();
+  }
+
+  /** Hides the spotlight and shows it again once the scroll to the finding has settled. */
+  function scheduleFocus(willScroll: boolean) {
+    focusReady = false;
+    focus.hidden = true;
+    const token = ++focusToken;
+    if (!willScroll) {
+      requestAnimationFrame(() => revealFocus(token));
+      return;
+    }
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      window.removeEventListener('scrollend', finish);
+      revealFocus(token);
+    };
+    window.addEventListener('scrollend', finish);
+    setTimeout(finish, 1200); // fallback if no scrollend fires (e.g. the scroll was interrupted)
+  }
+
+  /** Spotlights the finding's paragraph and dims the rest of the page while its tooltip is open. */
+  function positionFocus() {
+    if (!active || !focusReady) {
+      focus.hidden = true;
+      return;
+    }
+    // Measured every time (cheap), so it follows scrolling and layout shifts from lazy-loaded ads.
+    const range = active.range.getBoundingClientRect();
+    const block = paragraphOf(active.range)?.getBoundingClientRect();
+    const r = block && block.width > 0 && block.height > 0 ? block : range;
+    const left = Math.min(r.left, range.left);
+    const top = Math.min(r.top, range.top);
+    const right = Math.max(r.right, range.right);
+    const bottom = Math.max(r.bottom, range.bottom);
+    const pad = 10;
+    focus.hidden = false;
+    focus.style.left = `${left - pad}px`;
+    focus.style.top = `${top - pad}px`;
+    focus.style.width = `${right - left + pad * 2}px`;
+    focus.style.height = `${bottom - top + pad * 2}px`;
+  }
+
+  function onResize() {
+    positionTooltip();
+  }
+
   // Tooltip follows its range while the page scrolls (including nested scroll containers).
   function positionTooltip() {
+    positionFocus();
     if (!active) return;
     const rects = active.range.getClientRects();
     const rect = rects[0] ?? active.range.getBoundingClientRect();
@@ -146,6 +217,10 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
     });
     if (!finding) {
       tooltip.hidden = true;
+      focusKey = null;
+      focusReady = false;
+      focusToken++;
+      positionFocus();
       return;
     }
     const meta = CATEGORIES[finding.category];
@@ -161,10 +236,21 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
     );
     tooltip.style.setProperty('--cat', meta.color);
     tooltip.hidden = false;
+    let willScroll = false;
     if (scroll) {
       // Center the passage in the viewport; the tooltip tracks it during the smooth scroll.
       const rect = finding.range.getBoundingClientRect();
-      window.scrollBy({ top: rect.top - window.innerHeight * 0.4, behavior: 'smooth' });
+      const delta = rect.top - window.innerHeight * 0.4;
+      const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+      willScroll = Math.abs(delta) > 2 && !(delta > 0 && scrollY >= maxScroll - 1) && !(delta < 0 && scrollY <= 0);
+      if (willScroll) window.scrollBy({ top: delta, behavior: 'smooth' });
+    }
+    // A different finding than the one spotlit: re-spotlight after scrolling. Same finding
+    // (e.g. a re-render after a fact-check) keeps the current spotlight as is.
+    const key = findingKey(finding);
+    if (key !== focusKey) {
+      focusKey = key;
+      scheduleFocus(willScroll);
     }
     positionTooltip();
   }
@@ -281,7 +367,7 @@ async function createPanel(ctx: ContentScriptContext, onClose: () => void): Prom
     if (e.key === 'Escape' && active) showFinding(null);
   }
   window.addEventListener('scroll', positionTooltip, { capture: true, passive: true });
-  window.addEventListener('resize', positionTooltip);
+  window.addEventListener('resize', onResize);
   document.addEventListener('pointerdown', onPagePointerDown, true);
   document.addEventListener('pointermove', onPagePointerMove, { capture: true, passive: true });
   document.addEventListener('keydown', onKeyDown, true);
