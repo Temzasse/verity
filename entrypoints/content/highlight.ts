@@ -38,7 +38,22 @@ export function setActiveHighlight(finding: PlacedFinding | null) {
   hl.priority = 1;
   CSS.highlights.set(ACTIVE, hl);
   const style = ensureStyle();
-  style.textContent = css(finding.category);
+  style.textContent = css(finding.category, hasLightText(finding.range));
+}
+
+/**
+ * True when the passage is set in light text (dark-mode sites). The selected highlight then uses a
+ * deep tint instead of a pastel one, so the text keeps its contrast either way.
+ */
+function hasLightText(range: Range): boolean {
+  const node = range.startContainer;
+  const el = node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement;
+  if (!el) return false;
+  const m = getComputedStyle(el).color.match(/[\d.]+/g);
+  if (!m || m.length < 3) return false;
+  const [r, g, b] = m.slice(0, 3).map((v) => Number(v) / 255) as [number, number, number];
+  const lin = (c: number) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b) > 0.4;
 }
 
 export function clearHighlights() {
@@ -65,7 +80,7 @@ function ensureStyle(): HTMLStyleElement {
   return style;
 }
 
-function css(active: Category | null) {
+function css(active: Category | null, lightText = false) {
   const rules = Object.entries(CATEGORIES).flatMap(([id, { color }]) => [
     `::highlight(${name(id as Category)}) {
       background-color: color-mix(in srgb, ${color} 14%, transparent);
@@ -82,9 +97,11 @@ function css(active: Category | null) {
   rules.push(`html[data-verity-hover], html[data-verity-hover] * { cursor: pointer !important; }`);
   if (active) {
     const { color } = CATEGORIES[active];
-    // Light pastel tint (mixed with white, not see-through) so black text on it stays easy to read.
+    // Solid tint (not see-through) that keeps the text readable: a light pastel under dark text, a
+    // deep shade of the category colour under light text on dark-mode sites.
+    const fill = lightText ? `color-mix(in srgb, ${color} 42%, #111)` : `color-mix(in srgb, ${color} 26%, white)`;
     rules.push(
-      `::highlight(${ACTIVE}) { background-color: color-mix(in srgb, ${color} 26%, white); color: inherit; text-decoration: underline 2px ${color}; text-underline-offset: 3px; }`,
+      `::highlight(${ACTIVE}) { background-color: ${fill}; color: inherit; text-decoration: underline 2px ${color}; text-underline-offset: 3px; }`,
     );
   }
   return rules.join('\n');
