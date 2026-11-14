@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Verity: see the whole story</title>
+    <meta
+      name="description"
+      content="Verity is a Chrome extension that highlights manipulative language and questionable claims in news articles and blog posts, and explains the technique behind each one."
+    />
+    <meta property="og:title" content="Verity: see the whole story" />
+    <meta property="og:description" content="Highlights the manipulation, explains the trick. A Chrome extension for reading the news with your eyes open." />
+    <link rel="icon" type="image/svg+xml" href="assets/verity-mark.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="nav">
+      <div class="wrap nav-inner">
+        <a class="brand" href="#top" aria-label="Verity home">
+          <img src="assets/verity-mark.svg" alt="" height="26" />
+          <span>Verity</span>
+        </a>
+        <nav class="nav-links" aria-label="Sections">
+          <a href="#how">How it works</a>
+          <a href="#detects">What it detects</a>
+          <a href="#honest">Accuracy</a>
+          <a href="#install" class="nav-cta">Install</a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="top">
+      <!-- Hero -->
+      <section class="hero">
+        <div class="wrap hero-inner">
+          <div class="hero-copy">
+            <p class="eyebrow">Chrome extension · Junction 2026</p>
+            <h1 class="hero-logo"><img src="assets/verity-wordmark.svg" alt="Verity" /></h1>
+            <p class="tagline">See the whole story</p>
+            <p class="lede">
+              Verity scans the article you’re reading, highlights manipulative language and questionable claims, and explains in plain words which
+              technique is being used, so you learn <em>why</em> a sentence is trying to steer you, not just that it is.
+            </p>
+            <div class="hero-actions">
+              <a class="button button-primary" href="downloads/verity-extension.zip" download>
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M8 2.5v7.5M4.75 7 8 10.25 11.25 7M3 13.25h10" />
+                </svg>
+                Download for Chrome
+              </a>
+              <a class="button button-secondary" href="#install">How to install</a>
+            </div>
+            <p class="hero-note">Free · Works in Chrome, Edge and Brave · Installed manually while it awaits the Chrome Web Store</p>
+          </div>
+
+          <!-- Hero video placeholder: drop the clip in assets/hero.mp4 (and a poster in assets/hero-poster.jpg),
+               then replace this div with:
+               <video class="hero-media" src="assets/hero.mp4" poster="assets/hero-poster.jpg" autoplay muted loop playsinline></video> -->
+          <div class="hero-media hero-media--placeholder" role="img" aria-label="Hero video coming soon">
+            <div class="placeholder-inner">
+              <span class="placeholder-icon" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l10.5-6.5z" /></svg>
+              </span>
+              <span class="placeholder-label">Hero video</span>
+              <span class="placeholder-hint">16:10 · assets/hero.mp4</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- How it works -->
+      <section class="section" id="how">
+        <div class="wrap">
+          <p class="section-eyebrow">How it works</p>
+          <h2>One click, three layers of checking.</h2>
+          <div class="steps">
+            <article class="card step">
+              <span class="step-number">1</span>
+              <h3>Quick findings, instantly</h3>
+              <p>
+                Click the Verity icon. The article text is extracted and a small model running on your own device flags likely loaded language and
+                unattributed claims within a second. Nothing leaves your browser for this step.
+              </p>
+            </article>
+            <article class="card step">
+              <span class="step-number">2</span>
+              <h3>Smart analysis, explained</h3>
+              <p>
+                An AI analysis reviews the article and names the specific technique behind each flagged passage, with a short explanation in plain
+                language and a confidence level. Click a finding to jump to it on the page.
+              </p>
+            </article>
+            <article class="card step">
+              <span class="step-number">3</span>
+              <h3>Fact-check with sources</h3>
+              <p>
+                For factual claims, ask Verity to check them against the web. You get a verdict (supported, contradicted, disputed or couldn’t
+                verify) with links to the sources it used.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- What it detects -->
+      <section class="section section-tinted" id="detects">
+        <div class="wrap">
+          <p class="section-eyebrow">What it detects</p>
+          <h2>Techniques, not opinions.</h2>
+          <p class="section-lede">
+            Verity judges <strong>how</strong> something is written, not which side it takes. Arguing a point is fine; manipulating the reader is
+            what gets flagged.
+          </p>
+          <div class="techniques">
+            <div class="technique">
+              <span class="chip" style="--cat: #db2777">Loaded language</span>
+              <p>Emotionally charged wording used where neutral wording was available: “shameless cash grab”, “invasion”.</p>
+            </div>
+            <div class="technique">
+              <span class="chip" style="--cat: #dc2626">Propaganda techniques</span>
+              <p>Name calling, appeals to fear, flag-waving, slogans, bandwagon, casting doubt without evidence.</p>
+            </div>
+            <div class="technique">
+              <span class="chip" style="--cat: #7c3aed">Logical fallacies</span>
+              <p>Straw man, whataboutism, false dilemma, causal oversimplification, slippery slope.</p>
+            </div>
+            <div class="technique">
+              <span class="chip" style="--cat: #ca8a04">Unsupported claims</span>
+              <p>Numbers, events or causes stated as fact with no source: “experts say”, “studies show”.</p>
+            </div>
+            <div class="technique">
+              <span class="chip" style="--cat: #0891b2">Missing context</span>
+              <p>Technically true but misleading: cherry-picked statistics, missing baselines, one-sided framing.</p>
+            </div>
+            <div class="technique">
+              <span class="chip" style="--cat: #ea580c">Misinformation</span>
+              <p>Only when web sources contradict a claim. Without evidence either way, it stays an unsupported claim.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Honest by design -->
+      <section class="section" id="honest">
+        <div class="wrap">
+          <p class="section-eyebrow">Honest by design</p>
+          <h2>Built to avoid crying wolf.</h2>
+          <div class="honest-grid">
+            <div class="card honest">
+              <h3>Fewer, better flags</h3>
+              <p>
+                The analysis is told to flag only clear instances and return nothing for neutral, well-sourced writing. Every flag must quote the
+                exact words that triggered it; flags that quote text not in the article are discarded automatically.
+              </p>
+            </div>
+            <div class="card honest">
+              <h3>Reported speech isn’t the article’s spin</h3>
+              <p>
+                Quoting someone who uses loaded language is reporting. Verity only flags rhetoric inside quotes when the article itself adopts or
+                amplifies it.
+              </p>
+            </div>
+            <div class="card honest">
+              <h3>“Misinformation” needs evidence</h3>
+              <p>
+                A claim is only called misinformation when sources found on the web contradict it, and those sources are shown to you. Everything
+                else is labelled as unsupported or disputed.
+              </p>
+            </div>
+            <div class="card honest">
+              <h3>Quick vs smart, clearly labelled</h3>
+              <p>
+                On-device Quick findings are fast but less accurate, and are marked as such. Confidence is shown for every finding, and AI analysis
+                can be wrong: treat Verity as a second pair of eyes, not a verdict.
+              </p>
+            </div>
+          </div>
+          <div class="metrics card" id="accuracy">
+            <div>
+              <h3>Measured accuracy</h3>
+              <p>Precision, recall and false-positive rate on a labelled test set and on neutral control articles.</p>
+            </div>
+            <span class="badge">Results coming soon</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Install -->
+      <section class="section section-tinted" id="install">
+        <div class="wrap install">
+          <div class="install-copy">
+            <p class="section-eyebrow">Install</p>
+            <h2>Up and running in a minute.</h2>
+            <p class="section-lede">
+              Verity isn’t on the Chrome Web Store yet, so it’s installed as an unpacked extension. It works in Chrome, Edge, Brave and other
+              Chromium browsers.
+            </p>
+            <a class="button button-primary" href="downloads/verity-extension.zip" download>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M8 2.5v7.5M4.75 7 8 10.25 11.25 7M3 13.25h10" />
+              </svg>
+              Download verity-extension.zip
+            </a>
+          </div>
+          <ol class="install-steps">
+            <li class="card">
+              <span class="step-number">1</span>
+              <div>
+                <h3>Unzip the download</h3>
+                <p>Extract <code>verity-extension.zip</code> to a folder you’ll keep, for example in Documents.</p>
+              </div>
+            </li>
+            <li class="card">
+              <span class="step-number">2</span>
+              <div>
+                <h3>Open the extensions page</h3>
+                <p>Go to <code>chrome://extensions</code> (or <code>edge://extensions</code>) and switch on <strong>Developer mode</strong> in the top right.</p>
+              </div>
+            </li>
+            <li class="card">
+              <span class="step-number">3</span>
+              <div>
+                <h3>Load the folder</h3>
+                <p>Click <strong>Load unpacked</strong> and choose the folder you unzipped.</p>
+              </div>
+            </li>
+            <li class="card">
+              <span class="step-number">4</span>
+              <div>
+                <h3>Pin it and scan</h3>
+                <p>Pin Verity from the puzzle-piece menu, open any news article and click the Verity icon.</p>
+              </div>
+            </li>
+          </ol>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="wrap footer-inner">
+        <span class="brand brand-small">
+          <img src="assets/verity-mark.svg" alt="" height="20" />
+          <span>Verity</span>
+        </span>
+        <span class="footer-note">Built in 48 hours at Junction 2026 for the Hostinger challenge. Hosted on Hostinger.</span>
+        <a class="status" href="/api/health" data-status>
+          <span class="status-dot"></span>
+          <span data-status-label>API status</span>
+        </a>
+      </div>
+    </footer>
+
+    <script>
+      // Footer API status: a live check against the analysis server.
+      (async () => {
+        const link = document.querySelector('[data-status]');
+        const label = document.querySelector('[data-status-label]');
+        try {
+          const res = await fetch('/api/health', { cache: 'no-store' });
+          const ok = res.ok && (await res.json()).ok;
+          link.dataset.state = ok ? 'up' : 'down';
+          label.textContent = ok ? 'API online' : 'API unavailable';
+        } catch {
+          link.dataset.state = 'down';
+          label.textContent = 'API unavailable';
+        }
+      })();
+    </script>
+  </body>
+</html>

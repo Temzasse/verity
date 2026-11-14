@@ -13,6 +13,11 @@ const DAILY_BUDGET_USD = Number(process.env.DAILY_BUDGET_USD ?? 1);
 /** Optional shared secret; when set, requests must send it as the X-Verity-Token header. */
 const TOKEN = process.env.VERITY_TOKEN;
 const MAX_BODY_BYTES = 1_000_000;
+/** Paid (uncached) requests per client IP per hour. Cached results don't count. */
+const RATE_LIMITS = {
+  analyze: Number(process.env.RATE_ANALYZE_PER_HOUR ?? 30),
+  'fact-check': Number(process.env.RATE_FACTCHECK_PER_HOUR ?? 15),
+};
 // Changing a prompt invalidates its cached results.
 const PROMPT_VERSION = createHash('sha256').update(SYSTEM_PROMPT).digest('hex').slice(0, 8);
 const FACT_CHECK_VERSION = createHash('sha256').update(FACT_CHECK_PROMPT).digest('hex').slice(0, 8);
@@ -73,7 +78,7 @@ async function handleAnalyze(req: IncomingMessage, res: ServerResponse) {
     console.log(`[server] cache hit ${key} (${body.url})`);
     return json(res, 200, { findings: cached, model: MODEL, cached: true, costUsd: 0 } satisfies AnalysisResponse);
   }
-  if (await overBudget(res)) return;
+  if (rateLimited(req, res, 'analyze') || (await overBudget(res))) return;
 
   console.log(`[server] analyzing ${body.sentences.length} sentences: ${body.url}`);
   const started = Date.now();
@@ -96,7 +101,7 @@ async function handleFactCheck(req: IncomingMessage, res: ServerResponse) {
     console.log(`[server] fact-check cache hit ${key}`);
     return json(res, 200, { ...cached, cached: true, costUsd: 0 } satisfies FactCheckResponse);
   }
-  if (await overBudget(res)) return;
+  if (rateLimited(req, res, 'fact-check') || (await overBudget(res))) return;
 
   console.log(`[server] fact-checking: "${body.claim.slice(0, 100)}"`);
   const started = Date.now();
@@ -123,6 +128,28 @@ function checkPost(req: IncomingMessage, res: ServerResponse): boolean {
     return false;
   }
   return true;
+}
+
+// Fixed one-hour windows per client IP and endpoint, in memory (reset on restart; fine for one VPS).
+const windows = new Map<string, { start: number; count: number }>();
+function rateLimited(req: IncomingMessage, res: ServerResponse, kind: keyof typeof RATE_LIMITS): boolean {
+  // Behind Caddy the client address is the first X-Forwarded-For entry.
+  const forwarded = req.headers['x-forwarded-for'];
+  const ip = (Array.isArray(forwarded) ? forwarded[0] : forwarded)?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown';
+  const key = `${kind}:${ip}`;
+  const now = Date.now();
+  const w = windows.get(key);
+  if (!w || now - w.start > 3_600_000) {
+    windows.set(key, { start: now, count: 1 });
+    return false;
+  }
+  if (w.count >= RATE_LIMITS[kind]) {
+    const minutes = Math.ceil((w.start + 3_600_000 - now) / 60_000);
+    json(res, 429, { error: `Too many new analyses from this address. Try again in ${minutes} min.` });
+    return true;
+  }
+  w.count++;
+  return false;
 }
 
 async function overBudget(res: ServerResponse): Promise<boolean> {

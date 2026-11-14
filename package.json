@@ -5,13 +5,16 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently -k --handle-input -n ext,server -c blue,magenta \"pnpm:dev:ext\" \"pnpm:server\"",
+    "dev": "concurrently -k --handle-input -n ext,server,site -c blue,magenta,green \"pnpm:dev:ext\" \"pnpm:server\" \"pnpm:site\"",
     "dev:ext": "wxt",
     "build": "wxt build",
     "zip": "wxt zip",
     "compile": "tsc --noEmit",
     "postinstall": "wxt prepare",
-    "server": "node --env-file-if-exists=server/.env --watch server/index.ts"
+    "server": "node --env-file-if-exists=server/.env --watch server/index.ts",
+    "site": "node scripts/site-dev.mjs",
+    "release": "bash scripts/release.sh",
+    "deploy:vps": "bash scripts/deploy.sh"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",

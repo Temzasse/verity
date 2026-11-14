@@ -14,7 +14,7 @@ pnpm install
 pnpm dev
 ```
 
-This starts both the extension dev server and the analysis server (see below) in one terminal, with `[ext]` / `[server]` prefixed logs. WXT builds to `.output/chrome-mv3-dev` and opens a separate Chrome window with the extension already loaded. Run them separately with `pnpm dev:ext` and `pnpm server`.
+This starts the extension dev server, the analysis server (see below) and the landing page (http://localhost:4321, live reload, `/api` proxied to the local server) in one terminal, with `[ext]` / `[server]` / `[site]` prefixed logs. WXT builds to `.output/chrome-mv3-dev` and opens a separate Chrome window with the extension already loaded. Run them separately with `pnpm dev:ext` and `pnpm server`.
 
 - Click the Verity scan icon in the toolbar (pin it from the puzzle-piece menu) to scan the current page.
 - **Content scripts**: rebuilt on save and re-injected. Refresh the tab if state looks stale.
@@ -50,6 +50,24 @@ Each scan also runs a small model in the browser, so first results show up befor
 - **Merging:** once Claude's analysis arrives, Quick findings on sentences Claude also flagged are folded into Claude's findings (tagged "Also on-device"); the rest stay under "Quick findings".
 - The ONNX Runtime WASM files are copied into the build (`ort/`) by a hook in `wxt.config.ts`, because MV3 extensions can't load code from a CDN.
 
+## Deployment (Hostinger VPS)
+
+The landing page (`site/`) and the analysis server run on one VPS with Docker Compose: Caddy serves the page with automatic HTTPS and proxies `/api/*` to the server.
+
+1. In `.env` set `VERITY_DOMAIN` (domain whose A record points at the VPS) and `VPS_HOST` (e.g. `root@203.0.113.10`). Optional `VERITY_ALIASES="www.example.com other.host"` serves extra hostnames too (quote it: the file is sourced by bash).
+2. Make sure `server/.env` has the production API key and budget (it is copied to the VPS).
+3. Deploy:
+
+```bash
+pnpm deploy:vps
+```
+
+This builds the extension zip for `https://<domain>/api` (`pnpm release`), copies the stack to `/opt/verity` over SSH and runs `docker compose up -d --build`. Re-run it to ship updates.
+
+- Try the stack locally: `pnpm release example.test && VERITY_DOMAIN=:80 docker compose up --build`, then open http://localhost.
+- Hero video: put the clip in `site/assets/hero.mp4` and swap the placeholder in `site/index.html` (instructions in the comment there).
+- To use Hostinger's AI Router instead of Anthropic directly, set `ANTHROPIC_BASE_URL`, `ANTHROPIC_API_KEY` and `VERITY_MODEL` in `server/.env`.
+
 ## Project layout
 
 ```
@@ -67,6 +85,10 @@ utils/analysis.ts    analysis contract (categories, Finding, request/response) s
 utils/messages.ts    message types shared by background and content
 server/              local analysis server (Node, Claude Haiku 5.5): index.ts, claude.ts, prompt.ts, store.ts
 public/icon/         toolbar/extension icons
+site/                landing page (static), served by Caddy
+deploy/Caddyfile     HTTPS + /api proxy config
+docker-compose.yml   production stack (server + Caddy)
+scripts/             release.sh (extension zip), deploy.sh (ship to the VPS)
 wxt.config.ts        manifest + dev browser config
 ```
 
@@ -78,7 +100,10 @@ New entrypoints (e.g. `entrypoints/sidepanel/index.html`, `entrypoints/options/i
 | -------------- | --------------------------------------------- |
 | `pnpm dev`     | Extension dev server + Chrome + analysis server |
 | `pnpm dev:ext` | Extension dev server + Chrome only            |
+| `pnpm site`    | Landing page only, on :4321 with live reload  |
 | `pnpm build`   | Production build to `.output/chrome-mv3`      |
 | `pnpm zip`     | Build and zip for the Chrome Web Store        |
 | `pnpm compile` | Type-check                                    |
 | `pnpm server`  | Analysis server on :8787 (needs `server/.env`) |
+| `pnpm release` | Extension zip for the production domain → `site/downloads/` |
+| `pnpm deploy:vps` | Release + deploy the stack to the Hostinger VPS |

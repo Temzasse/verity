@@ -13,3 +13,7 @@ server/.cache
 .agents/
 .claude/
 skills-lock.json
+site/downloads/*.zip
+
+# Codex output
+output/

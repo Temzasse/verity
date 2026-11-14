@@ -1,3 +1,4 @@
+import { existsSync, readdirSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { defineConfig } from 'wxt';
@@ -26,6 +27,15 @@ export default defineConfig({
   hooks: {
     'build:publicAssets': (_wxt, files) => {
       for (const file of ORT_FILES) files.push({ absoluteSrc: join(ortDist, file), relativeDest: `ort/${file}` });
+    },
+    // Vite also emits its own hashed copy of the ORT WASM (from onnxruntime's default URL). We always
+    // load the copy in ort/ (see entrypoints/offscreen/quick.ts), so drop the duplicate: -27 MB.
+    'build:done': (wxt) => {
+      const assets = join(wxt.config.outDir, 'assets');
+      if (!existsSync(assets)) return;
+      for (const name of readdirSync(assets)) {
+        if (/^ort-wasm-simd-threaded.*\.wasm$/.test(name)) rmSync(join(assets, name));
+      }
     },
   },
   webExt: {

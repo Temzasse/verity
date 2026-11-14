@@ -1,0 +1,25 @@
+# Serves the landing page and proxies /api/* to the analysis server.
+# VERITY_DOMAIN is a domain (automatic HTTPS) or ":80" for plain HTTP (local testing).
+# VERITY_ALIASES: extra space-separated hostnames served the same way (www, the VPS hostname
+# that older extension builds call).
+{$VERITY_DOMAIN::80} {$VERITY_ALIASES:} {
+	encode zstd gzip
+
+	handle_path /api/* {
+		reverse_proxy server:8787
+	}
+
+	handle {
+		root * /srv/site
+		file_server
+	}
+
+	@downloads path /downloads/*
+	header @downloads Content-Disposition attachment
+	header @downloads Cache-Control "no-cache"
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+}

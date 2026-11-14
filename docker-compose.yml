@@ -1,0 +1,37 @@
+# Production stack for the Hostinger VPS: Caddy (HTTPS, landing page, /api proxy) + the analysis server.
+#   VERITY_DOMAIN=verity.example.com docker compose up -d --build
+services:
+  server:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    env_file: server/.env
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8787
+    volumes:
+      - verity-cache:/app/server/.cache
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    environment:
+      VERITY_DOMAIN: ${VERITY_DOMAIN:-:80}
+      VERITY_ALIASES: ${VERITY_ALIASES:-}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./site:/srv/site:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - server
+    restart: unless-stopped
+
+volumes:
+  verity-cache:
+  caddy-data:
+  caddy-config:

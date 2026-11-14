@@ -5,7 +5,8 @@ import { CATEGORY_IDS } from '../utils/analysis.ts';
 import type { AnalysisRequest, Finding } from '../utils/analysis.ts';
 import { SYSTEM_PROMPT, buildUserMessage } from './prompt.ts';
 
-export const MODEL = 'claude-haiku-5-5';
+/** Override with VERITY_MODEL, e.g. when a router names models differently. */
+export const MODEL = process.env.VERITY_MODEL || 'claude-haiku-5-5';
 
 // Claude Haiku 5.5 rates (USD per token) for prompts up to 100K tokens.
 export const PRICE = { input: 0.1e-6, output: 0.5e-6, cacheRead: 0.01e-6, cacheWrite: 0.125e-6 };
@@ -25,6 +26,7 @@ const FindingsSchema = z.object({
 
 // Uses only ANTHROPIC_API_KEY from server/.env (loaded by `pnpm server`), never other credentials
 // that may exist on the machine, so the hackathon key is the one that gets billed.
+// ANTHROPIC_BASE_URL optionally points the SDK at an Anthropic-compatible router (e.g. Hostinger AI Router).
 let client: Anthropic | undefined;
 export function getClient(): Anthropic {
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -32,7 +34,7 @@ export function getClient(): Anthropic {
     console.error('[claude] ANTHROPIC_API_KEY is not set. Add it to server/.env and restart `pnpm server`.');
     throw new AnalysisError('The analysis server is missing its API key (server/.env).', 500);
   }
-  client ??= new Anthropic({ apiKey });
+  client ??= new Anthropic({ apiKey, ...(process.env.ANTHROPIC_BASE_URL ? { baseURL: process.env.ANTHROPIC_BASE_URL } : {}) });
   return client;
 }
 
