@@ -56,17 +56,15 @@
             <p class="hero-note">Free · Works in Chrome, Edge and Brave · Installed manually while it awaits the Chrome Web Store</p>
           </div>
 
-          <!-- Hero video placeholder: drop the clip in assets/hero.mp4 (and a poster in assets/hero-poster.jpg),
-               then replace this div with:
-               <video class="hero-media" src="assets/hero.mp4" poster="assets/hero-poster.jpg" autoplay muted loop playsinline></video> -->
-          <div class="hero-media hero-media--placeholder" role="img" aria-label="Hero video coming soon">
-            <div class="placeholder-inner">
-              <span class="placeholder-icon" aria-hidden="true">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l10.5-6.5z" /></svg>
-              </span>
-              <span class="placeholder-label">Hero video</span>
-              <span class="placeholder-hint">16:10 · assets/hero.mp4</span>
-            </div>
+          <!-- Demo video (Vimeo, privacy mode: dnt=1 sets no tracking cookies). -->
+          <div class="hero-media hero-video">
+            <iframe
+              src="https://player.vimeo.com/video/1246919941?dnt=1&amp;title=0&amp;byline=0&amp;portrait=0"
+              title="Verity demo video"
+              allow="autoplay; fullscreen; picture-in-picture"
+              allowfullscreen
+              loading="lazy"
+            ></iframe>
           </div>
         </div>
       </section>
@@ -157,8 +155,13 @@
           <h2>Techniques, not opinions.</h2>
           <p class="section-lede">
             Verity judges <strong>how</strong> something is written, not which side it takes. Arguing a point is fine; manipulating the reader is
-            what gets flagged.
+            what gets flagged. Test your own eye: spot the technique in eight sentences.
           </p>
+          <div class="quiz" id="quiz">
+            <noscript><p class="section-lede">Turn on JavaScript to play the quiz.</p></noscript>
+          </div>
+          <details class="tech-glossary">
+            <summary>All techniques Verity detects</summary>
           <div class="techniques">
             <div class="technique" data-category="propaganda">
               <h3 class="technique-title" style="--cat: #dc2626">Propaganda techniques</h3>
@@ -191,6 +194,7 @@
               <ul class="tech-list"></ul>
             </div>
           </div>
+          </details>
         </div>
       </section>
 
@@ -326,6 +330,7 @@
     </footer>
 
     <script src="try.js" type="module"></script>
+    <script src="quiz.js" type="module"></script>
     <script src="dither.js" type="module"></script>
     <script>
       // Footer API status: a live check against the analysis server.
